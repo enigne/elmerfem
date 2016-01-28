@@ -31,6 +31,13 @@
 ! *           02101 Espoo, Finland 
 ! *
 ! *  Original Date: 09 Jun 1997
+! *****************************************************************************/
+!
+!/******************************************************************************
+! *  Edit by : Cheng Gong
+! *  Email:   cheng.gong@it.uu.se
+! *  Add: AB2 and AM2 second order time stepping methods
+! *  Date:  2016-01-28 
 ! *
 ! *****************************************************************************/
 
@@ -118,6 +125,161 @@ CONTAINS
 !------------------------------------------------------------------------------
    END SUBROUTINE NewmarkBeta
 !------------------------------------------------------------------------------
+
+
+   SUBROUTINE AdamsBashforth( N, dt, MassMatrix, StiffMatrix, &
+                   Force, PrevSolution, theta, adaptiveOrder)
+!------------------------------------------------------------------------------
+    INTEGER :: N    ! Size of the unknowns
+    REAL(KIND=dp) :: Force(:),PrevSolution(:),dt, theta
+    REAL(KIND=dp) :: MassMatrix(:,:),StiffMatrix(:,:)
+    TYPE(Element_t), POINTER :: Element
+    TYPE(elementdata_t), POINTER :: tempRes
+    LOGICAL  :: firstTime, GotIt
+    INTEGER :: adaptiveOrder
+
+!------------------------------------------------------------------------------
+    INTEGER :: i,j,NB1,NB2
+
+    REAL(KIND=dp) :: s_curr, m_curr, residual, curr_res, preForce
+!------------------------------------------------------------------------------
+    NB1 = SIZE( StiffMatrix,1 )
+    NB2 = SIZE( StiffMatrix,2 ) 
+    firstTime = .FALSE.
+
+!    WRITE(*,*) "====================== AB2 ======================"
+
+    Element => CurrentModel % CurrentElement
+    IF (.NOT. ASSOCIATED(Element % propertydata)) THEN
+      !WRITE(*,*) "====================== first time ======================",N,NB1,NB2
+      ALLOCATE( Element % propertydata )
+      ALLOCATE( Element % propertydata % values(NB1*2) )   ! save both forcing and residual due to accuracy problem
+
+      firstTime = .TRUE.
+   ELSE      
+      !WRITE(*,*) "==Got residual======================",N, NB1, NB2
+      firstTime = .FALSE.
+    END IF
+
+
+    DO i=1,NB1
+      s_curr = 0.0_dp
+      m_curr = 0.0_dp
+      DO j=1,n
+            s_curr = s_curr + StiffMatrix(i,j) * PrevSolution(j) 
+            m_curr = m_curr + (1/dt) * MassMatrix(i,j) * PrevSolution(j) 
+      END DO
+
+
+      curr_res = - s_curr
+
+      IF (firstTime .OR. adaptiveOrder == 1) THEN
+        residual =  curr_res
+        preForce = Force(i)
+      ELSE
+        residual = Element % propertydata % values(i)
+        preForce = Element % propertydata % values(i+NB1)        
+      END IF
+      Element % propertydata % values(i) = curr_res
+      Element % propertydata % values(i+NB1) = Force(i)
+
+!       WRITE(*,*) Element % elementindex, Force(i), preForce, PrevSolution(:), residual, curr_res
+!       Force(i) = Force(i) + m_curr + 1.5_dp * ( - s_curr) - 0.5_dp * residual
+!       Force(i) = Force(i) - s_curr  + m_curr + 0.5_dp * (Force(i) - preForce) + &
+!                       0.5_dp * (curr_res - residual)
+      
+      Force(i) = Force(i) - s_curr  + m_curr + 0.5_dp * theta * (Force(i) - preForce) + &
+                      0.5_dp * theta * (curr_res - residual)
+
+!       Force(i) = Force(i) - s_curr  + m_curr + 0.5_dp * theta * (Force(i) + curr_res) - &
+!                       0.5_dp * theta * ( preForce + residual)
+
+      DO j=1,NB2
+         StiffMatrix(i,j) =   (1/dt) * MassMatrix(i,j)
+      END DO
+
+!       IF (firstTime) THEN
+!         residual =  Force(i) - s_curr
+!         Element % propertydata % values(i) = Force(i) - s_curr
+!         Force(i) =  m_curr +  residual
+!       ELSE
+!         residual = Element % propertydata % values(i)
+!         Element % propertydata % values(i) = Force(i) - s_curr
+!         Force(i) = m_curr + 1.5 * (Force(i) - s_curr) - 0.5 * residual
+!       END IF       
+    END DO
+
+
+!------------------------------------------------------------------------------
+   END SUBROUTINE AdamsBashforth
+!------------------------------------------------------------------------------
+
+
+
+!> Apply Adams-Moulton(Correction) method to local matrix equation.
+!>
+!> A two steps method with second order accuracy in time.
+!> This method is only used in the correction phase of adaptive timestepping,
+!> PrevSolution -- the true solution from previous correction step H^{n-1}
+!> CurrSolution -- the corrector \tilde{H^n}
+!>
+!> This method can only be used in the corrector phase of Adaptive time stepping method
+!>   and just after AB2 method, otherwise the residual at n-1 step will be incorrect.
+!------------------------------------------------------------------------------
+
+   SUBROUTINE AdamsMoulton( N, dt, MassMatrix, StiffMatrix, &
+                   Force, PrevSolution, CurrSolution, firstFlag, adaptiveOrder)
+!------------------------------------------------------------------------------
+    INTEGER :: N
+    REAL(KIND=dp) :: Force(:),PrevSolution(:),dt
+    REAL(KIND=dp) :: MassMatrix(:,:),StiffMatrix(:,:),CurrSolution(:)
+    LOGICAL :: firstFlag
+    INTEGER :: adaptiveOrder
+!------------------------------------------------------------------------------
+    INTEGER :: i,j,NB1,NB2
+    TYPE(Element_t), POINTER :: Element
+
+    REAL(KIND=dp) :: s_curr, m_curr, residual, preForce
+!------------------------------------------------------------------------------
+    NB1 = SIZE( StiffMatrix,1 )
+    NB2 = SIZE( StiffMatrix,2 ) 
+ 
+    Element => CurrentModel % CurrentElement
+!    WRITE(*,*) "====================== AM2 ======================"
+
+
+    IF (.NOT. ASSOCIATED(Element % propertydata)) THEN
+      WRITE( Message, * ) 'Adams-Moulton method must be executed after Adams-Bashforth method!'
+      CALL Fatal( 'AdamsMoulton', Message )
+    END IF
+
+    DO i=1,NB1
+      s_curr = 0.0_dp
+      m_curr = 0.0_dp
+      DO j=1,n
+            s_curr = s_curr + StiffMatrix(i,j) * CurrSolution(j) 
+            m_curr = m_curr + (1/dt) * MassMatrix(i,j) * PrevSolution(j) 
+      END DO
+
+      DO j=1,NB2
+         StiffMatrix(i,j) =   (1/dt) * MassMatrix(i,j)
+      END DO
+
+      residual = Element % propertydata % values(i)
+      preForce = Element % propertydata % values(i+NB1)        
+      IF (firstFlag .OR. adaptiveOrder == 1) THEN
+        Force(i) =  Force(i) + m_curr - s_curr  
+      ELSE
+        Force(i) =  0.5_dp * (Force(i) + preForce) + m_curr + 0.5_dp * (-s_curr + residual)
+      END IF
+
+    END DO
+
+!------------------------------------------------------------------------------
+   END SUBROUTINE AdamsMoulton
+!------------------------------------------------------------------------------
+
+
 
 
 !------------------------------------------------------------------------------
@@ -561,6 +723,7 @@ CONTAINS
     REAL(KIND=dp) :: su,mu,uj,ui
 !------------------------------------------------------------------------------
     
+
     n = Matrix % NumberOfRows
     Rows   => Matrix % Rows
     Cols   => Matrix % Cols
