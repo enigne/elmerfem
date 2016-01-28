@@ -33,6 +33,13 @@
 ! *  Original Date: 08 Jun 1997
 ! *
 ! *****************************************************************************/
+!/******************************************************************************
+! *  Edit by : Cheng Gong
+! *  Email:   cheng.gong@it.uu.se
+! *  Add: Adaptive time stepping methods
+! *  Date:  2016-01-28 
+! *
+! *****************************************************************************/
 
 !> \ingroup ElmerLib
 !> \}
@@ -610,6 +617,8 @@ CONTAINS
     VariableGlobal, NoMatrix, IsAssemblySolver, IsCoupledSolver, IsBlockSolver, &
     IsProcedure, LegacySolver
 
+    LOGICAL :: AdaptiveTime = .TRUE.
+
     CHARACTER(LEN=MAX_NAME_LEN) :: str,eq,var_name,proc_name,tmpname
 
     TYPE(ValueList_t), POINTER :: SolverParams
@@ -825,12 +834,16 @@ CONTAINS
               Simulation, 'Runge-Kutta Order', Found, minv=2, maxv=4 )
           IF ( .NOT.Found ) Solver % Order = 2
         END IF
-        CALL Info('AddEquationBasics','Time stepping method is: '//TRIM(str),Level=12)
-     ELSE
-        CALL Warn( 'AddEquation', '> Timestepping method < defaulted to > Implicit Euler <' )
-        CALL ListAddString( SolverParams, 'Timestepping Method', 'Implicit Euler' )
+      ELSE
+         AdaptiveTime = ListGetLogical( CurrentModel % Simulation, &
+                  'Adaptive Timestepping', GotIt )
+        IF (AdaptiveTime) THEN
+          Solver % Order = 2
+        ELSE
+          CALL Warn( 'AddEquation', 'Time stepping method defaulted to IMPLICIT EULER' )
+          CALL ListAddString( SolverParams, 'Timestepping Method', 'Implicit Euler' )
+        END IF
       END IF
-
     END IF
 
     ! Get the procudure that really runs the solver

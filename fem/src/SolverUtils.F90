@@ -37,6 +37,13 @@
 ! *  Original Date: 28 Sep 1998
 ! *
 ! *****************************************************************************/
+!/******************************************************************************
+! *  Edit by : Cheng Gong
+! *  Email:   cheng.gong@it.uu.se
+! *  Add: Adaptive time stepping methods
+! *  Date:  2016-01-28 
+! *
+! *****************************************************************************/
 
 !> Basic utilities used by individual solvers. 
 !------------------------------------------------------------------------------
@@ -707,7 +714,7 @@ CONTAINS
      TYPE(Element_t), TARGET, OPTIONAL :: UElement !< Element structure
 !------------------------------------------------------------------------------
      LOGICAL :: GotIt
-     INTEGER :: i,j,k,l,m,Order
+     INTEGER :: i,j,k,l,m,Order, adaptiveOrder = 1
      REAL(KIND=dp) :: s, t
      CHARACTER(LEN=MAX_NAME_LEN) :: Method
      REAL(KIND=dp) :: PrevSol(DOFs*n,Solver % Order), CurSol(DOFs*n), LForce(n*DOFs)
@@ -716,7 +723,10 @@ CONTAINS
      LOGICAL :: ConstantDt
      TYPE(Element_t), POINTER :: Element
 !------------------------------------------------------------------------------
-
+!---------------------------- Added by CG 20151013 ----------------------------
+     REAL(KIND=dp) :: theta
+     LOGICAL :: firstFlag
+!------------------------------------------------------------------------------
      IF ( PRESENT(UElement) ) THEN
        Element => UElement
      ELSE
@@ -784,6 +794,13 @@ CONTAINS
 !------------------------------------------------------------------------------
 !PrevSol(:,Order) needed for BDF
      Method = ListGetString( Solver % Values, 'Timestepping Method', GotIt )
+!------------------------Edit by CG 20160128-------------------------
+     adaptiveOrder = ListGetInteger(CurrentModel % Simulation, &
+                    'Adaptive Method Order', GotIt)
+      IF (.NOT. GotIt) THEN
+        adaptiveOrder = 1
+      END IF 
+! !---------------------------------------------------------------------
 
      SELECT CASE( Method )
      CASE( 'fs' ) 
@@ -807,6 +824,19 @@ CONTAINS
          CALL VBDFLocal( n*DOFs, dts, MassMatrix, StiffMatrix, Force, PrevSol, &
                          Order )
        END IF
+
+!------------------------Edit by CG 20151215-------------------------
+     CASE('ab2')
+        theta = ListGetConstReal(Solver % Values, 'Adaptive Theta',GotIt)
+        CALL AdamsBashforth( n*DOFs, dt, MassMatrix, StiffMatrix, Force, &
+                PrevSol(:,1), theta, adaptiveOrder)
+!------------------------Edit by CG 20150826-------------------------
+     CASE('am2')
+        firstFlag = ListGetLogical( CurrentModel % Simulation, 'FirstTime Step')
+
+        CALL AdamsMoulton( n*DOFs, dt, MassMatrix, StiffMatrix, Force, &
+                PrevSol(:,2), PrevSol(:,1), firstFlag, adaptiveOrder)
+! !---------------------------------------------------------------------
 
      CASE('runge-kutta')
        CALL RungeKutta( n*DOFs, dt, MassMatrix, StiffMatrix, Force, &
@@ -6971,6 +7001,14 @@ END FUNCTION SearchNodeL
 
          CASE('fs')
            Solver % Beta = 0.5d0
+
+!------------------------Edit by CG 20150729-------------------------
+         CASE('ab2')
+           Solver % Beta = 0.0d0
+!------------------------Edit by CG 20150826-------------------------
+         CASE('am2')
+           Solver % Beta = 1.0d0
+!--------------------------------------------------------------------
 
          CASE('newmark')
            Solver % Beta = ListGetConstReal( Solver % Values, 'Newmark Beta', GotIt )
