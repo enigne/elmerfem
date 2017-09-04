@@ -1727,7 +1727,7 @@ MODULE NavierStokes
    TYPE(Element_t),POINTER :: Parent
    TYPE(Nodes_t) :: ParentNodes
 
-   REAL(KIND=dp) :: Basis(n),dBasisdx(n,3)
+   REAL(KIND=dp) :: Basis(n),dBasisdx(n,3), coefEps(n)
    REAL(KIND=dp) :: detJ,FlowStress(3,3),SlipCoeff
 
    REAL(KIND=dp) :: u,v,w,ParentU,ParentV,ParentW,s,x(n),y(n),z(n)
@@ -1769,6 +1769,9 @@ MODULE NavierStokes
      heaveSide = 1.0
 
      IF ( (ratio < 1.0) .AND. (ratio > 0.0) ) THEN
+      ! Determine the order of the element
+      ! Only valied in 2D
+      ! 3D is not implemented !!!!
       IF ( Nodes % x(1) >  Nodes % x(n) ) THEN
         IF (-u .LE. (2.0*ratio -1.0)) THEN
           heaveSide = 1.0
@@ -1889,10 +1892,31 @@ MODULE NavierStokes
          DO q=1,n
            DO i=1,dim
              IF (i == 1) THEN
+
+              IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
+                IF (p == n) THEN
+                  coefEps(1) = 0.0 !1.0 - heaveSide
+                  coefEps(n) = 1.0 !heaveSide
+                ELSE
+                  coefEps(1) = 1.0 !heaveSide
+                  coefEps(n) = 0.0 !1.0 - heaveSide
+                END IF
+              ELSE
+                IF (p == 1) THEN
+                  coefEps(1) = 1.0 !heaveSide
+                  coefEps(n) = 0.0 !1.0 - heaveSide
+                ELSE
+                  coefEps(1) = 0.0 !1.0 - heaveSide
+                  coefEps(n) = 1.0 !heaveSide
+                END IF
+              END IF
+              
+              SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) * coefEps(1:n) )
+
               ! IF ( (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
               !   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) 
               ! ELSE
-                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
+                
               ! END IF
              ELSE
               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaveSide
