@@ -1213,11 +1213,20 @@
               weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
               IF ( .NOT. GotIt ) weaklyMu = 1.0e6
               IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
+                ! All grounded Elements
                 IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0)) THEN
                   DO jj = 1, n
-                    SlipCoeff(1,jj) = weaklyMu!1.0e6  !1e8
+                    SlipCoeff(1, jj) = weaklyMu!1.0e6  !1e8
                   END DO 
                 END IF
+
+                ! GL element with one node floating
+                DO jj = 1, n
+                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) < 0.0) .AND. &
+                       (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0) ) THEN
+                    SlipCoeff(1, jj) = weaklyMu 
+                  END IF
+                END DO 
               END IF
             END IF
             !---------------------------------------------------------------
