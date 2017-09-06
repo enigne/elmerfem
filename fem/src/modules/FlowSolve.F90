@@ -144,6 +144,7 @@
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
+    REAL(KIND=dp),ALLOCATABLE :: weaklySlip(:)
 !=========================================================================
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
@@ -163,7 +164,7 @@
        LocalTemperature, GasConstant, HeatCapacity, LocalTempPrev,MU,MV,MW,     &
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
-       ComputeFree, Indexes, bedPressure
+       ComputeFree, Indexes, bedPressure, weaklySlip
 
 #ifdef USE_ISO_C_BINDINGS
       REAL(KIND=dp) :: at,at0,at1,totat,st,totst
@@ -322,7 +323,8 @@
                LocalTempPrev, LocalTemperature,     &
                PotentialField, PotentialCoefficient, &
                PSolution, LoadVector, Alpha, Beta, &
-               ExtPressure, bedPressure, STAT=istat )
+               ExtPressure, bedPressure, weaklySlip, &
+               STAT=istat )
        END IF
 
        ALLOCATE( U(N),  V(N),  W(N),                     &
@@ -348,7 +350,8 @@
                  PSolution( SIZE( FlowSolution ) ),      &
                  PotentialField( N ), PotentialCoefficient( N ), &
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
-                 ExtPressure( N ), bedPressure( N ), STAT=istat )
+                 ExtPressure( N ), bedPressure( N ),     &
+                 weaklySlip( N ), STAT=istat )
 
        Drag = 0.0d0
        NULLIFY(Pwrk) 
@@ -1156,6 +1159,26 @@
           END IF
 
 
+          !---------------------------------------------------------------
+          ! Weakly Imposed Dirichlet B.C.
+          !--------------------------------------------------------------- 
+          weaklyDirichlet = GetLogical( BC, 'Weakly Imposed Dirichlet', GotIt)
+
+          IF ( weaklyDirichlet ) THEN
+            weaklySlip(1:n) =  SlipCoeff(1,1:n)
+            weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
+            IF ( .NOT. GotIt ) weaklyMu = 1.0e6
+            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
+              ! All grounded Elements
+              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0)) THEN
+                DO jj = 1, n
+                  weaklySlip(jj) = weaklyMu
+                END DO 
+              END IF
+            END IF
+          END IF
+          !---------------------------------------------------------------
+
 !================================ GL parameterization ===========================  
           ratio = 1.0_dp
 
@@ -1203,35 +1226,31 @@
 
               END IF
             END IF
-
             !---------------------------------------------------------------
             ! Weakly Imposed Dirichlet B.C.
             !--------------------------------------------------------------- 
-            weaklyDirichlet = GetLogical( BC, 'Weakly Imposed Dirichlet', GotIt)
-
             IF ( weaklyDirichlet ) THEN
-              weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
-              IF ( .NOT. GotIt ) weaklyMu = 1.0e6
               IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
-                ! All grounded Elements
-                IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0)) THEN
-                  DO jj = 1, n
-                    SlipCoeff(1, jj) = weaklyMu!1.0e6  !1e8
-                  END DO 
-                END IF
-
-                ! GL element with one node floating
+                 ! GL element with one node floating
                 DO jj = 1, n
-                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) < 0.0) .AND. &
+                  ! IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) < 0.0) .AND. &
+                  !      (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0) ) THEN
+                  !   weaklySlip(jj) = weaklyMu 
+                  ! END IF
+                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0) .AND. &
                        (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0) ) THEN
-                    SlipCoeff(1, jj) = weaklyMu 
+                    weaklySlip(jj) = SlipCoeff(1,jj) 
                   END IF
+
                 END DO 
               END IF
             END IF
             !---------------------------------------------------------------
           END IF
 
+          IF ( weaklyDirichlet ) THEN
+            SlipCoeff(1,1:n) = weaklySlip(1:n)
+          END IF
           ! Get corresponding bedrock slop at the current element
 
           !!!!!!!! Need to be implemented !!!!!!!! 

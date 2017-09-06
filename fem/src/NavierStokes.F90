@@ -1840,7 +1840,7 @@ MODULE NavierStokes
         CALL tan2Normal2D(bslope, tempNormal)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++++++', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), Alpha, u
+          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), Nodes% x(1:n), u
         END IF
         Normal = tempNormal
 
@@ -1850,7 +1850,7 @@ MODULE NavierStokes
         CALL tan2Normal2D(tanTheta, tempNormal)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=================', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), Alpha, u
+          WRITE (*,*) '=============', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), Nodes% x(1:n), u
         END IF
         Normal = tempNormal
       END IF
@@ -1892,32 +1892,34 @@ MODULE NavierStokes
          DO q=1,n
            DO i=1,dim
              IF (i == 1) THEN
-
-              IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
-                IF (p == n) THEN
-                  coefEps(1) = 0.0 !1.0 - heaveSide
-                  coefEps(n) = 1.0 !heaveSide
+              IF ( (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
+                !=============================================================
+                ! 2D only
+                IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
+                  ! x(1) grounded, x(n) floating
+                  ! IF ( q == 1 ) THEN
+                    SlipCoeff =  NodalSlipCoeff(1,1) * heaveSide +  &
+                                 NodalSlipCoeff(1,n) * (1.0 - heaveSide)
+                  ! ELSE
+                  !   SlipCoeff = NodalSlipCoeff(1,n) * (1.0 - heaveSide)
+                  ! END IF
                 ELSE
-                  coefEps(1) = 1.0 !heaveSide
-                  coefEps(n) = 0.0 !1.0 - heaveSide
-                END IF
+                  ! x(n) grounded, x(1) floating
+                  ! IF ( q == n ) THEN
+                    SlipCoeff =  NodalSlipCoeff(1,n) * heaveSide +  &
+                                 NodalSlipCoeff(1,1) * (1.0 - heaveSide)
+                  ! ELSE
+                  !   SlipCoeff = NodalSlipCoeff(1,1) * (1.0 - heaveSide)
+                  ! END IF
+                END IF 
+                !=============================================================
+
               ELSE
-                IF (p == 1) THEN
-                  coefEps(1) = 1.0 !heaveSide
-                  coefEps(n) = 0.0 !1.0 - heaveSide
-                ELSE
-                  coefEps(1) = 0.0 !1.0 - heaveSide
-                  coefEps(n) = 1.0 !heaveSide
-                END IF
+                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
               END IF
-              
-              SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) * coefEps(1:n) )
 
-              ! IF ( (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
-              !   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) 
-              ! ELSE
-                
-              ! END IF
+                ! SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
+
              ELSE
               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaveSide
              END IF
