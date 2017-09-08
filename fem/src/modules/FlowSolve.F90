@@ -1233,10 +1233,10 @@
               IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
                  ! GL element with one node floating
                 DO jj = 1, n
-                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) < 0.0) .AND. &
-                       (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0) ) THEN
-                    weaklySlip(jj) = weaklyMu 
-                  END IF
+                  ! IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) < 0.0) .AND. &
+                  !      (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0) ) THEN
+                  !   weaklySlip(jj) = weaklyMu 
+                  ! END IF
                   IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0) .AND. &
                        (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0) ) THEN
                     weaklySlip(jj) = SlipCoeff(1,jj) 
