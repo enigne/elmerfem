@@ -1711,7 +1711,7 @@ MODULE NavierStokes
    IMPLICIT NONE
 
    REAL(KIND=dp), INTENT(INOUT)         :: BoundaryMatrix(:,:), BoundaryVector(:)
-   REAL(KIND=dp), INTENT(IN)            :: LoadVector(:,:), NodalAlpha(:),NodalBeta(:)
+   REAL(KIND=dp), INTENT(IN)            :: LoadVector(:,:), NodalAlpha(:), NodalBeta(:)
    REAL(KIND=dp), INTENT(IN)            :: NodalSlipCoeff(:,:), NodalExtPressure(:), NodalBedPressure(:)
    INTEGER, INTENT(IN)                  :: n, nIntegration
    TYPE(Element_t),POINTER, INTENT(IN)  :: Element
@@ -1897,16 +1897,16 @@ MODULE NavierStokes
                IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
                  ! x(1) grounded, x(n) floating
                  ! IF ( q == 1 ) THEN
-                   SlipCoeff =   NodalSlipCoeff(1,1) * heaveSide +  &
-                                 NodalSlipCoeff(1,n) * (1.0 - heaveSide)
+                   SlipCoeff =   NodalSlipCoeff(i, 1) * heaveSide +  &
+                                 NodalSlipCoeff(i, n) * (1.0 - heaveSide)
                  ! ELSE
                  !   SlipCoeff = NodalSlipCoeff(1,n) * (1.0 - heaveSide)
                  ! END IF
                ELSE
                  ! x(n) grounded, x(1) floating
                  ! IF ( q == n ) THEN
-                   SlipCoeff =   NodalSlipCoeff(1,n) * heaveSide +  &
-                                 NodalSlipCoeff(1,1) * (1.0 - heaveSide)
+                   SlipCoeff =   NodalSlipCoeff(i, n) * heaveSide +  &
+                                 NodalSlipCoeff(i, 1) * (1.0 - heaveSide)
                  ! ELSE
                  !   SlipCoeff = NodalSlipCoeff(1,1) * (1.0 - heaveSide)
                  ! END IF
