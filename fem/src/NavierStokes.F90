@@ -1680,8 +1680,9 @@ MODULE NavierStokes
 !>  boundary conditions in cartesian coordinates.
 !------------------------------------------------------------------------------
  SUBROUTINE NavierStokesBoundaryPara( BoundaryMatrix,BoundaryVector,LoadVector,   &
-    NodalAlpha, NodalBeta, NodalExtPressure, NodalBedPressure, NodalSlipCoeff, NormalTangential, &
-    Element, n, Nodes, nIntegration, ratio, bslope, outputFlag , PressureParamFlag)
+    NodalAlpha, NodalBeta, NodalExtPressure, NodalBedPressure, NodalSlipCoeff,  &
+    NormalTangential, Element, n, Nodes, nIntegration, ratio, bslope, outputFlag, &
+    PressureParamFlag, NodalNetPressure)
              
 !------------------------------------------------------------------------------
 !     Assemble boundary matrix and RHS for slip boundary conditions
@@ -1713,6 +1714,7 @@ MODULE NavierStokes
    REAL(KIND=dp), INTENT(INOUT)         :: BoundaryMatrix(:,:), BoundaryVector(:)
    REAL(KIND=dp), INTENT(IN)            :: LoadVector(:,:), NodalAlpha(:), NodalBeta(:)
    REAL(KIND=dp), INTENT(IN)            :: NodalSlipCoeff(:,:), NodalExtPressure(:), NodalBedPressure(:)
+   REAL(KIND=dp), INTENT(IN)            :: NodalNetPressure(:)
    INTEGER, INTENT(IN)                  :: n, nIntegration
    TYPE(Element_t),POINTER, INTENT(IN)  :: Element
    TYPE(Nodes_t), INTENT(IN)            :: Nodes
@@ -1736,6 +1738,7 @@ MODULE NavierStokes
                Vect(3), Alpha, mu,Grad(3,3),Velo(3), tempNormal(3), tempPressure(n)
 
    REAL(KIND=dp) :: xx, yy, ydot, ydotdot, MassFlux, heaveSide, tanAlpha, tanTheta
+   REAL(KIND=dp) :: pressure_Integ
 
    INTEGER :: i,j,k,l,k1,k2,t,q,p,c,dim,N_Integ,np
 
@@ -1768,24 +1771,16 @@ MODULE NavierStokes
      w = W_Integ(t)
      heaveSide = 1.0
 
-     IF ( (ratio < 1.0) .AND. (ratio > 0.0) ) THEN
-      ! Determine the order of the element
-      ! Only valied in 2D
-      ! 3D is not implemented !!!!
-      IF ( Nodes % x(1) >  Nodes % x(n) ) THEN
-        IF (-u .LE. (2.0*ratio -1.0)) THEN
-          heaveSide = 1.0
-        ELSE 
-          heaveSide = 0.0
-        END IF
-      ELSE
-        IF (u .LE. (2.0*ratio -1.0)) THEN
-          heaveSide = 1.0
-        ELSE 
-          heaveSide = 0.0
-        END IF
-      END IF
-     END IF 
+     ! Net pressure at the current gauss points
+     pressure_Integ = sum(NodalNetPressure(1:n) * Basis)
+
+     ! Determine heaveSide function value
+     IF (pressure_Integ > 0) THEN ! Floating
+        heaveSide = 0.0d0
+     ELSE !Grounded
+        heaveSide = 1.0d0
+     END IF
+
 !------------------------------------------------------------------------------
 !    Basis function values & derivatives at the integration point
 !------------------------------------------------------------------------------
@@ -1808,7 +1803,9 @@ MODULE NavierStokes
        Force(i) = Force(i) + SUM( LoadVector(i,1:n)*Basis )
      END DO
 
-     ! Special treatment for pressure on GL element
+!------------------------------------------------------------------------------
+!    Special treatment for pressure on GL element
+!------------------------------------------------------------------------------
      IF ( (ratio < 1.0) .AND. (ratio > 0.0) .AND. PressureParamFlag)  THEN
         IF ( heaveSide > 0.5 ) THEN
           ! Grounded use bedrock pressure 
@@ -1834,13 +1831,14 @@ MODULE NavierStokes
 !------------------------------------------------------------------------------
      Normal = NormalVector( Element, Nodes, u,v,.TRUE. )
 
+     ! Adjust Noraml direction according to the parameterization
       tanAlpha = - Normal(1) / Normal(2)
       IF ( heaveSide > 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
         ! Grounded
         CALL tan2Normal2D(bslope, tempNormal)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), Nodes% x(1:n), u
+          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(2,1:n), sum(NodalNetPressure(1:n) * Basis)
         END IF
         Normal = tempNormal
 
@@ -1850,13 +1848,10 @@ MODULE NavierStokes
         CALL tan2Normal2D(tanTheta, tempNormal)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=============', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), Nodes% x(1:n), u
+          WRITE (*,*) '=============', NodalSlipCoeff(2,1:n), sum(NodalNetPressure(1:n) * Basis)
         END IF
         Normal = tempNormal
       END IF
-
-
-
 
 
      IF ( NormalTangential ) THEN

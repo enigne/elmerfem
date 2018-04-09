@@ -144,7 +144,7 @@
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
-    REAL(KIND=dp),ALLOCATABLE :: weaklySlip(:)
+    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:)
 !=========================================================================
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
@@ -164,7 +164,7 @@
        LocalTemperature, GasConstant, HeatCapacity, LocalTempPrev,MU,MV,MW,     &
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
-       ComputeFree, Indexes, bedPressure, weaklySlip
+       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure
 
 #ifdef USE_ISO_C_BINDINGS
       REAL(KIND=dp) :: at,at0,at1,totat,st,totst
@@ -324,7 +324,7 @@
                PotentialField, PotentialCoefficient, &
                PSolution, LoadVector, Alpha, Beta, &
                ExtPressure, bedPressure, weaklySlip, &
-               STAT=istat )
+               NetPressure, STAT=istat )
        END IF
 
        ALLOCATE( U(N),  V(N),  W(N),                     &
@@ -351,7 +351,7 @@
                  PotentialField( N ), PotentialCoefficient( N ), &
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
                  ExtPressure( N ), bedPressure( N ),     &
-                 weaklySlip( N ), STAT=istat )
+                 weaklySlip( N ), NetPressure( N ), STAT=istat )
 
        Drag = 0.0d0
        NULLIFY(Pwrk) 
@@ -1192,7 +1192,9 @@
             END IF
 
             PressureParamFlag = GetLogical( BC, 'Parameterize Pressure', GotIt)
-
+            
+            ! netPressure = 0.0
+            
             IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
             ! Find GL element
               IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0)  .AND. &
@@ -1208,6 +1210,8 @@
                   IF (GLparaIndex == 0) CYCLE
 
                   cond = GroundingLinePara(GLparaIndex)
+                  ! Prepare net pressure to be used in parameterizing beta
+                  ! netPressure(jj) = cond
 
 
                   IF ( cond < 0 ) THEN
@@ -1251,8 +1255,11 @@
           IF ( weaklyDirichlet ) THEN
             SlipCoeff(1,1:n) = weaklySlip(1:n)
           END IF
-          ! Get corresponding bedrock slop at the current element
 
+          DO jj = 1, n
+            NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
+          END DO
+          ! Get corresponding bedrock slop at the current element
           !!!!!!!! Need to be implemented !!!!!!!! 
           bslope = -778.5/750.0e3
           outputFlag = .FALSE.
@@ -1267,9 +1274,9 @@
           CASE( Cartesian )
             IF ( GLParaFlag .AND. (ratio < 1.0_dp) ) THEN
               CALL NavierStokesBoundaryPara(  STIFF, FORCE, LoadVector, &
-                  Alpha, Beta, ExtPressure, bedPressure, SlipCoeff, NormalTangential, &
-                  Element, n, ElementNodes, nIntegration, ratio, bslope, outputFlag , &
-                  PressureParamFlag )
+                  Alpha, Beta, ExtPressure, bedPressure, SlipCoeff,  &
+                  NormalTangential, Element, n, ElementNodes, nIntegration, &
+                  ratio, bslope, outputFlag, PressureParamFlag, NetPressure)
             ELSE
               CALL NavierStokesBoundary(  STIFF, FORCE, &
                LoadVector, Alpha, Beta, ExtPressure, SlipCoeff, NormalTangential,   &
