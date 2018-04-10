@@ -1886,31 +1886,7 @@ MODULE NavierStokes
        DO p=1,n
          DO q=1,n
            DO i=1,dim
-             IF ( (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
-               !=============================================================
-               ! 2D only
-               IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
-                 ! x(1) grounded, x(n) floating
-                 ! IF ( q == 1 ) THEN
-                   SlipCoeff =   NodalSlipCoeff(i, 1) * heaveSide +  &
-                                 NodalSlipCoeff(i, n) * (1.0 - heaveSide)
-                 ! ELSE
-                 !   SlipCoeff = NodalSlipCoeff(1,n) * (1.0 - heaveSide)
-                 ! END IF
-               ELSE
-                 ! x(n) grounded, x(1) floating
-                 ! IF ( q == n ) THEN
-                   SlipCoeff =   NodalSlipCoeff(i, n) * heaveSide +  &
-                                 NodalSlipCoeff(i, 1) * (1.0 - heaveSide)
-                 ! ELSE
-                 !   SlipCoeff = NodalSlipCoeff(1,1) * (1.0 - heaveSide)
-                 ! END IF
-               END IF 
-               !=============================================================
-             ELSE
-               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
-             END IF
-
+               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaveSide
              IF ( NormalTangential ) THEN
                 SELECT CASE(i)
                    CASE(1)
