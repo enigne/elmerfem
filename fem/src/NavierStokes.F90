@@ -1809,7 +1809,7 @@ MODULE NavierStokes
      IF ( (ratio < 1.0) .AND. (ratio > 0.0) .AND. PressureParamFlag)  THEN
         IF ( heaveSide > 0.5 ) THEN
           ! Grounded use bedrock pressure 
-          Alpha = SUM( NodalBedPressure(1:n) * Basis )  
+          Alpha = SUM( NodalBedPressure(1:n) * Basis )  * heaveSide
         ELSE
           ! Floating
           ! ii = 1 for grounded node
@@ -1838,7 +1838,7 @@ MODULE NavierStokes
         CALL tan2Normal2D(bslope, tempNormal)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(2,1:n), sum(NodalNetPressure(1:n) * Basis)
+          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(:,1:n), sum(NodalNetPressure(1:n) * Basis)
         END IF
         Normal = tempNormal
 
@@ -1848,7 +1848,7 @@ MODULE NavierStokes
         CALL tan2Normal2D(tanTheta, tempNormal)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=============', NodalSlipCoeff(2,1:n), sum(NodalNetPressure(1:n) * Basis)
+          WRITE (*,*) '=============', NodalSlipCoeff(:,1:n), sum(NodalNetPressure(1:n) * Basis)
         END IF
         Normal = tempNormal
       END IF
@@ -1886,7 +1886,11 @@ MODULE NavierStokes
        DO p=1,n
          DO q=1,n
            DO i=1,dim
+             IF (i == 1) THEN
+               SlipCoeff = SUM( NodalSlipCoeff(1,1:n) * Basis(1:n) ) 
+             ELSE
                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaveSide
+             END IF
              IF ( NormalTangential ) THEN
                 SELECT CASE(i)
                    CASE(1)
