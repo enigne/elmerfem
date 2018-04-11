@@ -1170,7 +1170,7 @@
             IF ( .NOT. GotIt ) weaklyMu = 1.0e6
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
               ! All grounded Elements
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > 0)) THEN
+              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0)) THEN
                 DO jj = 1, n
                   weaklySlip(jj) = weaklyMu
                 END DO 
