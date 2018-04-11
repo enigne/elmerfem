@@ -1890,11 +1890,21 @@ MODULE NavierStokes
        DO p=1,n
          DO q=1,n
            DO i=1,dim
-             IF (i == 1) THEN
-               SlipCoeff = SUM( NodalSlipCoeff(1,1:n) * Basis(1:n) ) 
+             IF ( (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
+               !=============================================================
+               ! 2D only
+               IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
+                   SlipCoeff =   NodalSlipCoeff(i,1) * heaviSide +  &
+                                 NodalSlipCoeff(i,n) * (1.0 - heaviSide)
+               ELSE
+                   SlipCoeff =   NodalSlipCoeff(i,n) * heaviSide +  &
+                                 NodalSlipCoeff(i,1) * (1.0 - heaviSide)
+               END IF 
+               !=============================================================
              ELSE
                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
              END IF
+
              IF ( NormalTangential ) THEN
                 SELECT CASE(i)
                    CASE(1)
