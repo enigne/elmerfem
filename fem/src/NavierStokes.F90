@@ -1737,7 +1737,7 @@ MODULE NavierStokes
    REAL(KIND=dp) :: TangentForce(3),Force(3),Normal(3),Tangent(3),Tangent2(3), &
                Vect(3), Alpha, mu,Grad(3,3),Velo(3), tempNormal(3), tempPressure(n)
 
-   REAL(KIND=dp) :: xx, yy, ydot, ydotdot, MassFlux, heaveSide, tanAlpha, tanTheta
+   REAL(KIND=dp) :: xx, yy, ydot, ydotdot, MassFlux, heaviSide, tanAlpha, tanTheta
    REAL(KIND=dp) :: pressure_Integ
 
    INTEGER :: i,j,k,l,k1,k2,t,q,p,c,dim,N_Integ,np
@@ -1769,17 +1769,7 @@ MODULE NavierStokes
      u = U_Integ(t)
      v = V_Integ(t)
      w = W_Integ(t)
-     heaveSide = 1.0
-
-     ! Net pressure at the current gauss points
-     pressure_Integ = sum(NodalNetPressure(1:n) * Basis)
-
-     ! Determine heaveSide function value
-     IF (pressure_Integ > 0) THEN ! Floating
-        heaveSide = 0.0d0
-     ELSE !Grounded
-        heaveSide = 1.0d0
-     END IF
+     heaviSide = 1.0
 
 !------------------------------------------------------------------------------
 !    Basis function values & derivatives at the integration point
@@ -1788,6 +1778,20 @@ MODULE NavierStokes
                  Basis, dBasisdx )
 
      s = detJ * S_Integ(t)
+
+!------------------------------------------------------------------------------
+!    Compute heaviside function according the the net pressure
+!------------------------------------------------------------------------------
+    ! Net pressure at the current gauss points
+     pressure_Integ = sum(NodalNetPressure(1:n) * Basis)
+
+     ! Determine heaviSide function value
+     IF (pressure_Integ >= 0) THEN ! Floating
+        heaviSide = 0.0d0
+     ELSE !Grounded
+        heaviSide = 1.0d0
+     END IF
+
 !------------------------------------------------------------------------------
 !    Add to load: tangetial derivative of something
 !------------------------------------------------------------------------------
@@ -1807,9 +1811,9 @@ MODULE NavierStokes
 !    Special treatment for pressure on GL element
 !------------------------------------------------------------------------------
      IF ( (ratio < 1.0) .AND. (ratio > 0.0) .AND. PressureParamFlag)  THEN
-        IF ( heaveSide > 0.5 ) THEN
+        IF ( heaviSide > 0.5 ) THEN
           ! Grounded use bedrock pressure 
-          Alpha = SUM( NodalBedPressure(1:n) * Basis )  * heaveSide
+          Alpha = SUM( NodalBedPressure(1:n) * Basis )
         ELSE
           ! Floating
           ! ii = 1 for grounded node
@@ -1833,22 +1837,22 @@ MODULE NavierStokes
 
      ! Adjust Noraml direction according to the parameterization
       tanAlpha = - Normal(1) / Normal(2)
-      IF ( heaveSide > 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
+      IF ( heaviSide > 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
         ! Grounded
         CALL tan2Normal2D(bslope, tempNormal)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(:,1:n), sum(NodalNetPressure(1:n) * Basis)
+          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), pressure_Integ
         END IF
         Normal = tempNormal
 
-      ELSE IF ( heaveSide < 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
+      ELSE IF ( heaviSide < 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
         ! Floating
         tanTheta = (tanAlpha - ratio*bslope) / (1.0-ratio)
         CALL tan2Normal2D(tanTheta, tempNormal)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=============', NodalSlipCoeff(:,1:n), sum(NodalNetPressure(1:n) * Basis)
+          WRITE (*,*) '=============', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), pressure_Integ
         END IF
         Normal = tempNormal
       END IF
@@ -1889,7 +1893,7 @@ MODULE NavierStokes
              IF (i == 1) THEN
                SlipCoeff = SUM( NodalSlipCoeff(1,1:n) * Basis(1:n) ) 
              ELSE
-               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaveSide
+               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
              END IF
              IF ( NormalTangential ) THEN
                 SELECT CASE(i)
