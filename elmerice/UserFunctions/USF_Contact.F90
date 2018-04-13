@@ -550,7 +550,11 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
           IF ( GroundingLinePara(GroundingLineParaPerm(nodenumber)) < 0 ) Friction = .TRUE.
           IF ( GroundingLinePara(GroundingLineParaPerm(nodenumber)) > 0 ) Friction = .FALSE.
 
-
+          !----> GL element with grounded and floating nodes
+          ! IF ( ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) >= 0)  .AND. &
+          !      ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) < 0)) THEN
+          !   Friction = .TRUE.
+          ! END IF
 
           ! Pure Floating Element
           ! IF (ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0)) Friction = .FALSE.
