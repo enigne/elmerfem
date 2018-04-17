@@ -1181,33 +1181,19 @@
               END IF
 
               !----> GL element with grounded and floating nodes
-              IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
-                IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
-                     ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
-                  DO jj = 1, n
-                    IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
-                      weaklySlip(jj) = SlipCoeff(1,jj) 
-                    END IF
-                  END DO 
-                END IF
+              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
+                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
+                DO jj = 1, n
+                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
+                    weaklySlip(jj) = SlipCoeff(1,jj) 
+                  END IF
+                END DO 
               END IF
             END IF
+
+            ! restore slip coefficients
             SlipCoeff(1,1:n) = weaklySlip(1:n)
           END IF
-
-
-!================================ Get the FF slip coefficient, and set it to be 0 ===========================  
-          ! IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
-          !   IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
-          !      ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
-          !       DO jj = 1, n
-          !         IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
-          !           SlipCoeff(2, jj) = 0.0
-          !         END IF
-          !       END DO 
-
-          !   END IF
-          ! END IF
 
 !===============================================================================
 !         GL parameterization
