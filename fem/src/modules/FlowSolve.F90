@@ -1171,33 +1171,43 @@
             weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
             IF ( .NOT. GotIt ) weaklyMu = 1.0e6
 
-            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
-                 ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0.0_dp)  .AND. &
+                 ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0.0_dp) ) THEN
               !----> Elements with all nodes grounded 
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0)) THEN
+              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0.0_dp)) THEN
                 DO jj = 1, n
                   weaklySlip(jj) = weaklyMu
                 END DO 
               END IF
 
               !----> GL element with grounded and floating nodes
-              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0)  .AND. &
-                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0)) THEN
-                DO jj = 1, n
-                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0) ) THEN
-                    weaklySlip(jj) = SlipCoeff(1,jj) 
-                  END IF
-                END DO 
+              IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+                IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
+                     ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
+                  DO jj = 1, n
+                    IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
+                      weaklySlip(jj) = SlipCoeff(1,jj) 
+                    END IF
+                  END DO 
+                END IF
               END IF
             END IF
             SlipCoeff(1,1:n) = weaklySlip(1:n)
           END IF
 
 
-
 !================================ Get the FF slip coefficient, and set it to be 0 ===========================  
-    
+          ! IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+          !   IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
+          !      ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
+          !       DO jj = 1, n
+          !         IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
+          !           SlipCoeff(2, jj) = 0.0
+          !         END IF
+          !       END DO 
 
+          !   END IF
+          ! END IF
 
 !===============================================================================
 !         GL parameterization
@@ -1247,7 +1257,7 @@
                   ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
                 END IF
 
-                WRITE ( Message, '(A,I0,A,g15.6)' ) 'GL & FF element found with index =', t, 'ratio is ', ratio
+                WRITE ( Message, '(A,I0,A,g15.6)' ) 'GL & FF element found with index =', t, ', ratio is ', ratio
                 CALL Info( 'FlowSolve', Message, Level=6 )
 
               END IF
