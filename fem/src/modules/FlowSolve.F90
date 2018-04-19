@@ -142,7 +142,7 @@
                      weaklyMu, GLposition, SmoothL, SmoothFactor
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
-               weaklyDirichlet = .FALSE.
+               weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
     REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:)
 !=========================================================================
@@ -1250,23 +1250,26 @@
             END IF
 
             ! smoothing function for grounded nodes only
-            IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
-              GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
-              SmoothL = 1.0 * ABS(ElementNodes % x(n) - ElementNodes % x(1))
+            smoothDirichlet = GetLogical( BC, 'Weakly Dirichlet Smoothing', GotIt)
+            IF (smoothDirichlet) THEN
+              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
+                GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
+                SmoothL = 1.0 * ABS(ElementNodes % x(n) - ElementNodes % x(1))
 
-              DO jj = 1, n
-                tempNodeIndex = Element % NodeIndexes(jj)  
-                GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
-                IF (GLparaIndex == 0) CYCLE
+                DO jj = 1, n
+                  tempNodeIndex = Element % NodeIndexes(jj)  
+                  GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
+                  IF (GLparaIndex == 0) CYCLE
 
 
-                IF (GroundingLinePara(GLparaIndex) < 0.0_dp) THEN 
-                  CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, 1, weaklyMu, 9.8e-3_dp , SmoothFactor)
-                  SlipCoeff(1, jj) = SmoothFactor
-                END IF
-              END DO
-
+                  IF (GroundingLinePara(GLparaIndex) < 0.0_dp) THEN 
+                    CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, 1, weaklyMu, 9.8e-3_dp , SmoothFactor)
+                    SlipCoeff(1, jj) = SmoothFactor
+                  END IF
+                END DO
+              END IF
             END IF
+
           END IF
 
           DO jj = 1, n
