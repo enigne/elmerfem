@@ -1902,7 +1902,7 @@ MODULE NavierStokes
                                    NodalSlipCoeff(i,1) * (1.0 - heaviSide)
                  END IF 
                ELSE
-                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide
+                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * 0.5
                END IF
                !=============================================================
              ELSE

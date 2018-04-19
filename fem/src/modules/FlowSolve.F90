@@ -139,7 +139,7 @@
     INTEGER, POINTER :: GroundingLineParaPerm(:), GroundedMaskPerm(:)
     INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex
     REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, ratio, bslope, &
-                     weaklyMu
+                     weaklyMu, GLposition, SmoothL, SmoothFactor
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE.
@@ -1247,6 +1247,25 @@
                 CALL Info( 'FlowSolve', Message, Level=6 )
 
               END IF
+            END IF
+
+            ! smoothing function for grounded nodes only
+            IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
+              GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
+              SmoothL = 1.0 * ABS(ElementNodes % x(n) - ElementNodes % x(1))
+
+              DO jj = 1, n
+                tempNodeIndex = Element % NodeIndexes(jj)  
+                GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
+                IF (GLparaIndex == 0) CYCLE
+
+
+                IF (GroundingLinePara(GLparaIndex) < 0.0_dp) THEN 
+                  CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, 1, weaklyMu, 9.8e-3_dp , SmoothFactor)
+                  SlipCoeff(1, jj) = SmoothFactor
+                END IF
+              END DO
+
             END IF
           END IF
 
@@ -2745,5 +2764,36 @@ CONTAINS
 !------------------------------------------------------------------------------
   END FUNCTION FlowInsideResidual
 !------------------------------------------------------------------------------
+
+
+
+!------------------------------------------------------------------------------
+!> 
+!------------------------------------------------------------------------------
+  SUBROUTINE SmoothingAroundGL ( xGL, x, L, smoothingType, a, b, smoothingFactor)
+    USE DefUtils
+         
+    IMPLICIT NONE
+
+    REAL(KIND=dp) :: xGL, x, L, smoothingFactor, dist, a, b
+    INTEGER :: smoothingType
+    ! smoothingType = 1, for the weakly Dirichlet
+    ! smoothingType = 2, for the slip coefficient Beta
+
+    IF ( L > 0.0_dp ) THEN 
+      dist = ( x - xGL ) / L
+    ELSE 
+      dist =  x - xGL 
+    END IF
+
+    SELECT CASE ( smoothingType )
+       CASE( 1 )
+        smoothingFactor = 10.0**( (LOG10(a)+LOG10(b))*0.5 - 0.5*(LOG10(a)-LOG10(b))*TANH(dist))
+       CASE( 2 )
+        smoothingFactor = TANH(dist)
+       CASE DEFAULT
+        smoothingFactor = TANH(dist)
+    END SELECT 
+  END SUBROUTINE SmoothingAroundGL
 
 !> \} 
