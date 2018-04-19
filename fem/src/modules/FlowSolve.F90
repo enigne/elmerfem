@@ -137,9 +137,9 @@
     TYPE(variable_t), POINTER :: GroundingLineVar, GroundedMaskVar
 
     INTEGER, POINTER :: GroundingLineParaPerm(:), GroundedMaskPerm(:)
-    INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex
+    INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex, smoothingType
     REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, ratio, bslope, &
-                     weaklyMu, GLposition, SmoothL, SmoothFactor
+                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE.
@@ -1252,9 +1252,16 @@
             ! smoothing function for grounded nodes only
             smoothDirichlet = GetLogical( BC, 'Weakly Dirichlet Smoothing', GotIt)
             IF (smoothDirichlet) THEN
+
+              smoothingType = GetInteger(BC, 'Weakly Dirichlet Smoothing Type', GotIt)
+              IF (.NOT. Gotit) smoothingType = 1
+
+              smoothingRange = GetConstReal(BC, 'Weakly Dirichlet Smoothing Range', GotIt)
+              IF (.NOT. Gotit) smoothingRange = 1.0_dp
+
               IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
                 GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
-                SmoothL = 1.0 * ABS(ElementNodes % x(n) - ElementNodes % x(1))
+                SmoothL = smoothingRange * ABS(ElementNodes % x(n) - ElementNodes % x(1))
 
                 DO jj = 1, n
                   tempNodeIndex = Element % NodeIndexes(jj)  
@@ -1263,7 +1270,8 @@
 
 
                   IF (GroundingLinePara(GLparaIndex) < 0.0_dp) THEN 
-                    CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, 1, weaklyMu, 9.8e-3_dp , SmoothFactor)
+                    CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, smoothingType, &
+                          weaklyMu, 9.8e-3_dp , SmoothFactor)
                     SlipCoeff(1, jj) = SmoothFactor
                   END IF
                 END DO
@@ -2793,9 +2801,10 @@ CONTAINS
        CASE( 1 )
         smoothingFactor = 10.0**( (LOG10(a)+LOG10(b))*0.5 - 0.5*(LOG10(a)-LOG10(b))*TANH(dist))
        CASE( 2 )
-        smoothingFactor = TANH(dist)
+        dist = dist + 1
+        smoothingFactor = 10.0**( (LOG10(a)+LOG10(b))*0.5 - 0.5*(LOG10(a)-LOG10(b))*TANH(dist))
        CASE DEFAULT
-        smoothingFactor = TANH(dist)
+        smoothingFactor = 10.0**( (LOG10(a)+LOG10(b))*0.5 - 0.5*(LOG10(a)-LOG10(b))*TANH(dist))
     END SELECT 
   END SUBROUTINE SmoothingAroundGL
 
