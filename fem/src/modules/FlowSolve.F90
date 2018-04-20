@@ -1257,7 +1257,7 @@
               IF (.NOT. Gotit) smoothingType = 1
 
               smoothingRange = GetConstReal(BC, 'Weakly Dirichlet Smoothing Range', GotIt)
-              IF (.NOT. Gotit) smoothingRange = 1.0_dp
+              IF (.NOT. Gotit) smoothingRange = 2.0_dp
 
               IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
                 GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
@@ -1268,8 +1268,7 @@
                   GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
                   IF (GLparaIndex == 0) CYCLE
 
-
-                  IF (GroundingLinePara(GLparaIndex) < 0.0_dp) THEN 
+                  IF ( GroundedMask(GroundedMaskPerm(tempNodeIndex)) > -0.5_dp ) THEN 
                     CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, smoothingType, &
                           weaklyMu, 9.8e-3_dp , SmoothFactor)
                     SlipCoeff(1, jj) = SmoothFactor
