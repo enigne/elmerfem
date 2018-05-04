@@ -388,7 +388,7 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
   INTEGER, POINTER :: NormalPerm(:), ResidPerm(:), GroundedMaskPerm(:), HydroPerm(:), DistancePerm(:)
   INTEGER :: nodenumber, ii, DIM, GL_retreat, n, tt, Nn, jj, MSum, ZSum
 
-  LOGICAL :: FirstTime = .TRUE., GotIt, Yeschange, GLmoves, Friction,UnFoundFatal=.TRUE.
+  LOGICAL :: FirstTime = .TRUE., GotIt, Yeschange, GLmoves, Friction, specialCaseFlag, UnFoundFatal=.TRUE.
 
   REAL (KIND=dp) ::  y, relChange, relChangeOld, Sliding_Budd, Sliding_Weertman, Friction_Coulomb
 
@@ -534,29 +534,47 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
      CASE('discontinuous')
         BoundaryElement => Model % CurrentElement
         IF (ALL(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))>-0.5)) Friction = .TRUE. 
+     !=============================================================
      CASE('parameterization')
-
-!=============================================================
-    ! Parameterize GL
+        ! Parameterize GL
         GroundingLineParaVar => VariableGet( Model % Mesh % Variables, 'GroundingLinePara', UnFoundFatal=UnFoundFatal)
         GroundingLinePara => GroundingLineParaVar % Values
         GroundingLineParaPerm => GroundingLineParaVar % Perm
-!=============================================================  
+
         BoundaryElement => Model % CurrentElement
-        ! Pure Grounded Element
+        ! Pure Grounded Element (especially for the first time step, GLpara=0)
         IF (ALL(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) Friction = .TRUE. 
 
-        IF ( GroundingLineParaPerm(nodenumber) > 0) THEN
-          IF ( GroundingLinePara(GroundingLineParaPerm(nodenumber)) < 0.0 ) Friction = .TRUE.
-          IF ( ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0) ) Friction = .FALSE.
+        ! At least one node is on the bedrock
+        IF ( ANY(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) THEN
+          IF ( GroundingLineParaPerm(nodenumber) > 0) THEN
+            ! Take away exceptions, contact but no pressure towards the bedrock
+            IF ( ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0) ) Friction = .FALSE.
 
-          ! ----> GL element with grounded and floating nodes
-          IF ( ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0)  .AND. &
-               ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) < 0.0)) THEN
-            Friction = .TRUE.
+            ! Contact and has pressure downward
+            IF ( (GroundingLinePara(GroundingLineParaPerm(nodenumber)) < 0.0) .AND. &
+                 (GroundedMask(GroundedMaskPerm(nodenumber)) > -0.5) ) Friction = .TRUE.
+
+            ! ----> GL element with grounded and floating nodes
+            IF ( ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0)  .AND. &
+                 ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) < 0.0)) THEN
+              ! Generally this is the GL element
+              Friction = .TRUE.
+
+              specialCaseFlag = .TRUE.
+              ! One special case: no the grounded node has downward net pressure 
+              n = GetElementNOFNodes()
+              DO ii = 1, n
+                jj = Element % NodeIndexes(ii)
+                IF ( (GroundedMask(GroundedMaskPerm(jj)) > -0.5) .AND. (GroundingLinePara(GroundingLineParaPerm(jj)) < 0.0 ) )  THEN
+                  specialCaseFlag = .FALSE.
+                END IF
+              END DO
+              IF (specialCaseFlag) Friction = .FALSE.
+            END IF
           END IF
         END IF
-!=============================================================
+     !=============================================================
      CASE DEFAULT
         WRITE(Message, '(A,A)') 'GL type not recognised ', GLtype 
         CALL FATAL( USF_Name, Message)
