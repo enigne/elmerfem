@@ -548,6 +548,9 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
         ! At least one node is on the bedrock
         IF ( ANY(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) THEN
           IF ( GroundingLineParaPerm(nodenumber) > 0) THEN
+            ! Set friction for the element with at least one node at the bed, then check
+            Friction = .TRUE.
+
             ! Take away exceptions, contact but no pressure towards the bedrock
             IF ( ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0) ) Friction = .FALSE.
 
