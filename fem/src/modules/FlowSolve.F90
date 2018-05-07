@@ -1171,19 +1171,21 @@
             weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
             IF ( .NOT. GotIt ) weaklyMu = 1.0e6
 
-            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0.0_dp)  .AND. &
-                 ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0.0_dp) ) THEN
-              !----> Elements with all nodes grounded 
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) >= 0.0_dp)) THEN
+            ! Check for the node with masks
+            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
+                 ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+              ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
+              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp)) THEN
                 DO jj = 1, n
                   weaklySlip(jj) = weaklyMu
                 END DO 
               END IF
 
-              !----> GL element with grounded and floating nodes
+              ! GL element with grounded and floating nodes
               IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
                    ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
                 DO jj = 1, n
+                  ! GL nodes with positive net pressure, can move upwards
                   IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
                     weaklySlip(jj) = SlipCoeff(1,jj) 
                   END IF
@@ -1193,63 +1195,11 @@
 
             ! restore slip coefficients
             SlipCoeff(1,1:n) = weaklySlip(1:n)
-          END IF
-
-!===============================================================================
-!         GL parameterization
-!===============================================================================
-          ratio = 1.0_dp
-
-          IF ( GLParaFlag ) THEN
-            HighOrderGLInt = GetLogical( BC, 'High Order Integration', GotIt)
-            IF ( HighOrderGLInt ) THEN
-              nIntegration = GetInteger( BC, 'Order of Slip Coefficient', GotIt)
-              IF ( .NOT. GotIt ) nIntegration = 2
-            ELSE 
-              nIntegration = 2
-            END IF
-
-            PressureParamFlag = GetLogical( BC, 'Parameterize Pressure', GotIt)
-            
-            ! netPressure = 0.0
-            
-            IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
-            ! Find GL element
-              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0)  .AND. &
-                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0)) THEN
-
-                FFstressSum = 0.0_dp
-                GLstressSum = 0.0_dp
-
-                DO jj = 1, n
-                  tempNodeIndex = Element % NodeIndexes(jj)
-                  
-                  GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
-                  IF (GLparaIndex == 0) CYCLE
-
-                  cond = GroundingLinePara(GLparaIndex)
-                  ! Prepare net pressure to be used in parameterizing beta
-                  ! netPressure(jj) = cond
-
-
-                  IF ( cond < 0 ) THEN
-                    GLstressSum = GLstressSum + cond
-                  ELSE IF ( cond >= 0) THEN
-                    FFstressSum = FFstressSum + cond
-                  END IF
-                END DO
-   
-                IF ( (GLstressSum*FFstressSum) < 0.0 ) THEN 
-                  ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
-                END IF
-
-                WRITE ( Message, '(A,I0,A,g15.6)' ) 'GL & FF element found with index =', t, ', ratio is ', ratio
-                CALL Info( 'FlowSolve', Message, Level=6 )
-
-              END IF
-            END IF
 
             ! smoothing function for grounded nodes only
+            !=======================================================================
+            ! Need to be rewritten
+            ! Smoothing 
             smoothDirichlet = GetLogical( BC, 'Weakly Dirichlet Smoothing', GotIt)
             IF (smoothDirichlet) THEN
 
@@ -1276,20 +1226,79 @@
                 END DO
               END IF
             END IF
+          !=======================================================================
+          END IF
+          
+
+!===============================================================================
+!         GL parameterization
+!===============================================================================
+          ratio = 1.0_dp
+
+          IF ( GLParaFlag ) THEN
+            ! High-Order integration
+            HighOrderGLInt = GetLogical( BC, 'High Order Integration', GotIt)
+            IF ( HighOrderGLInt ) THEN
+              nIntegration = GetInteger( BC, 'Order of Slip Coefficient', GotIt)
+              IF ( .NOT. GotIt ) nIntegration = 2
+            ELSE 
+              nIntegration = 2
+            END IF
+
+            ! Parameterize pressure, use water pressure at bedrock for the grounded area in the GL element
+            PressureParamFlag = GetLogical( BC, 'Parameterize Pressure', GotIt)
+            
+            ! Determine GL element by looking for the element with opposite signs in the net pressure
+            IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+            ! Find GL element
+              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0)  .AND. &
+                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0)) THEN
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                ! currently only for 2D, 3D need to be implemented on the edges 
+                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                ! Initialize temprary variables 
+                FFstressSum = 0.0_dp
+                GLstressSum = 0.0_dp
+
+                ! Go through all the nodes
+                DO jj = 1, n
+                  tempNodeIndex = Element % NodeIndexes(jj)
+                  
+                  GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
+                  IF (GLparaIndex == 0) CYCLE
+
+                  cond = GroundingLinePara(GLparaIndex)
+                  ! sum up net pressure contributions
+                  IF ( cond < 0 ) THEN
+                    GLstressSum = GLstressSum + cond
+                  ELSE IF ( cond >= 0) THEN
+                    FFstressSum = FFstressSum + cond
+                  END IF
+                END DO
+    
+                ! Compute the ratio and determine GL position relatively
+                IF ( (GLstressSum*FFstressSum) < 0.0 ) THEN 
+                  ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
+                END IF
+
+                WRITE ( Message, '(A,I0,A,g15.6)' ) 'GL element found with index =', t, ', ratio is ', ratio
+                CALL Info( 'FlowSolve', Message, Level=6 )
+
+              END IF
+            END IF
+
+            ! Net Pressure 
+            DO jj = 1, n
+              NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
+            END DO
+            ! Get corresponding bedrock slop at the current element
+            !!!!!!!! Need to be implemented !!!!!!!! 
+            bslope = -778.5/750.0e3
+            outputFlag = .FALSE.
+            IF ( iter == 1) outputFlag = .TRUE.
 
           END IF
-
-          DO jj = 1, n
-            NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
-          END DO
-          ! Get corresponding bedrock slop at the current element
-          !!!!!!!! Need to be implemented !!!!!!!! 
-          bslope = -778.5/750.0e3
-          outputFlag = .FALSE.
-          IF ( iter == 1) outputFlag = .TRUE.
-          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
 !===============================================================================
-
 
 
 !------------------------------------------------------------------------------
