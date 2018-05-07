@@ -91,7 +91,6 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
     ! REAL(KIND=dp), POINTER :: LGParaData(:), FFParaData(:), GroundedMask(:), GroundingLinePara(:)
 
     TYPE(ValueList_t),POINTER :: BC
-    REAL(KIND=dp) :: ExtPressure(2)
 !=========================================================================
 
   SAVE HydroDIM, bedPComputed, DIM, FirstTime
@@ -214,103 +213,96 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
   END DO
 
   IF ( ParEnv % PEs>1 ) CALL ParallelSumVector( Solver % Matrix, VariableValues, 1 )
-
  
 !======================= Compute parameterized GL position ==========================
-! currently only work for 2D problem
-!====================================================================================
-      GLNodeX = 0.0
-      FFNodeX = 0.0
-      GLNodeIndex = 0
-      FFNodeIndex = 0
-      GLParaPosition = 0.0
+! Make GL position available for next time step 
+!!!!!! currently only work for 2D problem
+  !====================================================================================
+  GLNodeX = 0.0
+  FFNodeX = 0.0
+  GLNodeIndex = 0
+  FFNodeIndex = 0
+  GLParaPosition = 0.0
 
-      DO tt = 1, Model % NumberOfBoundaryElements
-        Element => GetBoundaryElement(tt)
-        IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
+  ! Go through all boundary element to check for GL element 
+  DO tt = 1, Model % NumberOfBoundaryElements
+    Element => GetBoundaryElement(tt)
+    ! Parallel implementation
+    IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
 
-        CALL GetElementNodes(Nodes, Element)
+    CALL GetElementNodes(Nodes, Element)
 
+    BC => GetBC()
+    IF ( .NOT. ASSOCIATED(BC) ) CYCLE
 
-        BC => GetBC()
-        IF ( .NOT. ASSOCIATED(BC) ) CYCLE
+    ! For GL element which contains GL and FF nodes
+    IF ( ALL(Permutation(Element % NodeIndexes) > 0) ) THEN
+      IF (((ANY(VariableValues(Permutation(Element % NodeIndexes)) >= 0.0_dp))) .AND. &
+          ((ANY(VariableValues(Permutation(Element % NodeIndexes)) < 0.0_dp)))) THEN
+        n = GetElementNOFNodes(Element)
+        ! Total stress on the elment
+        GLstressSum = 0.0_dp
+        FFstressSum = 0.0_dp
+        DO ii = 1, n           
+          GLnodenumber = Permutation(Element % NodeIndexes(ii))
 
-        ExtPressure(1:2) = GetReal( BC, 'bedrock Pressure', GotIt )
-
-
-
-      ! For GL element which contains GL and FF nodes
-        IF ( ALL(Permutation(Element % NodeIndexes) > 0) ) THEN
-          IF (((ANY(VariableValues(Permutation(Element % NodeIndexes)) >= 0))) .AND. &
-              ((ANY(VariableValues(Permutation(Element % NodeIndexes)) < 0)))) THEN
-            n = GetElementNOFNodes(Element)
-            ! Total stress on the elment
-            GLstressSum = 0.0_dp
-            FFstressSum = 0.0_dp
-            DO ii = 1, n           
-              GLnodenumber = Permutation(Element % NodeIndexes(ii))
-
-              IF (GLnodenumber == 0) CYCLE
+          IF (GLnodenumber == 0) CYCLE
 
 
-              cond = VariableValues(GLnodenumber)
-              ! Check for GL nodes
-              IF (cond < 0) THEN 
-                GLstressSum = GLstressSum + VariableValues(GLnodenumber)
-                GLNodeIndex = Element % NodeIndexes(ii)
-                GLNodeX = Nodes % x(ii)
-              ! Floating Nodes
-              ELSE IF (cond >= 0) THEN
-                FFstressSum = FFstressSum + VariableValues(GLnodenumber)
-                FFNodeIndex = Element % NodeIndexes(ii)
-                FFNodeX = Nodes % x(ii)
-              END IF
-            END DO
-
-            IF ( (GLstressSum*FFstressSum) < 0.0 ) THEN
-              ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
-              GLParaPosition = GLNodeX + ratio * ABS(FFNodeX - GLNodeX)
-              WRITE (Message, '(A, g15.10)') '============== GL parameterization position at x =', GLParaPosition
-              CALL Info(SolverName, Message, Level=3)
-              CALL ListAddConstReal( Model % Constants, 'GroundingLine Position', GLParaPosition )
-          
-              IF (GLparaSaveData) THEN
-                ! Get the current Time
-                CurrentTimeVar => VariableGet( Solver % Mesh % Variables, 'Time')
-                Time = CurrentTimeVar % Values(1) 
-                    
-                ! Save Data
-                OPEN(unit=134, file=GLParaFileName, POSITION='APPEND')
-
-                WRITE(134, *) Time, FFNodeIndex, GLNodeIndex, GLParaPosition, &
-                      VariableValues(Permutation(FFNodeIndex)), VariableValues(Permutation(GLNodeIndex)), &
-                      ResidValues((DIM+1)*(ResidPerm(FFNodeIndex)-1)+1 : (DIM+1)*ResidPerm(FFNodeIndex)-1), &
-                      NormalValues(DIM*(NormalPerm(FFNodeIndex)-1)+1 : DIM*NormalPerm(FFNodeIndex)), &
-                      HydroValues(HydroDIM*(HydroPerm(FFNodeIndex)-1)+DIM+1 : HydroDIM*(HydroPerm(FFNodeIndex))), &
-                      ResidValues((DIM+1)*(ResidPerm(GLNodeIndex)-1)+1 : (DIM+1)*ResidPerm(GLNodeIndex)-1), &
-                      NormalValues(DIM*(NormalPerm(GLNodeIndex)-1)+1 : DIM*NormalPerm(GLNodeIndex)), &
-                      HydroValues(HydroDIM*(HydroPerm(GLNodeIndex)-1)+DIM+1 : HydroDIM*(HydroPerm(GLNodeIndex))) ,&
-                      ExtPressure(1:2), ResidValuesWeight(ResidPermWeight(FFNodeIndex)), &
-                      ResidValuesWeight(ResidPermWeight(GLNodeIndex))
-                CLOSE(134)
-              END IF
-            ELSE
-              CALL Fatal(SolverName, 'GL parameterization error!')
-            END IF
+          cond = VariableValues(GLnodenumber)
+          ! Check for GL nodes
+          IF (cond <  0.0_dp) THEN 
+            GLstressSum = GLstressSum + VariableValues(GLnodenumber)
+            GLNodeIndex = Element % NodeIndexes(ii)
+            GLNodeX = Nodes % x(ii)
+          ! Floating Nodes
+          ELSE IF (cond >=  0.0_dp) THEN
+            FFstressSum = FFstressSum + VariableValues(GLnodenumber)
+            FFNodeIndex = Element % NodeIndexes(ii)
+            FFNodeX = Nodes % x(ii)
           END IF
+        END DO
+
+        ! Compute the position of GL in GL element, the ratio represent the relative position from grounded node side
+        IF ( (GLstressSum*FFstressSum) <  0.0_dp ) THEN
+          ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
+          GLParaPosition = GLNodeX + ratio * ABS(FFNodeX - GLNodeX)
+          ! Output on the screen
+          WRITE (Message, '(A, g15.10)') '============== GL parameterization position at x =', GLParaPosition
+          CALL Info(SolverName, Message, Level=3)
+          ! Save to position for the other solvers to use
+          !!!!!! multiple GL position need to be implemented
+          CALL ListAddConstReal( Model % Constants, 'GroundingLine Position', GLParaPosition )
+          !!!!!! 
+
+          ! Save data file
+          IF (GLparaSaveData) THEN
+            ! Get the current Time
+            CurrentTimeVar => VariableGet( Solver % Mesh % Variables, 'Time')
+            Time = CurrentTimeVar % Values(1) 
+                
+            ! Save Data
+            OPEN(unit=134, file=GLParaFileName, POSITION='APPEND')
+
+            WRITE(134, *) Time, FFNodeIndex, GLNodeIndex, GLParaPosition, &
+                  VariableValues(Permutation(FFNodeIndex)), VariableValues(Permutation(GLNodeIndex)), &
+                  ResidValues((DIM+1)*(ResidPerm(FFNodeIndex)-1)+1 : (DIM+1)*ResidPerm(FFNodeIndex)-1), &
+                  NormalValues(DIM*(NormalPerm(FFNodeIndex)-1)+1 : DIM*NormalPerm(FFNodeIndex)), &
+                  HydroValues(HydroDIM*(HydroPerm(FFNodeIndex)-1)+DIM+1 : HydroDIM*(HydroPerm(FFNodeIndex))), &
+                  ResidValues((DIM+1)*(ResidPerm(GLNodeIndex)-1)+1 : (DIM+1)*ResidPerm(GLNodeIndex)-1), &
+                  NormalValues(DIM*(NormalPerm(GLNodeIndex)-1)+1 : DIM*NormalPerm(GLNodeIndex)), &
+                  HydroValues(HydroDIM*(HydroPerm(GLNodeIndex)-1)+DIM+1 : HydroDIM*(HydroPerm(GLNodeIndex))) ,&
+                  ResidValuesWeight(ResidPermWeight(FFNodeIndex)), ResidValuesWeight(ResidPermWeight(GLNodeIndex))
+            CLOSE(134)
+          END IF
+        ELSE
+          CALL Fatal(SolverName, 'GL parameterization error!')
         END IF
-      END DO
-
-
-      
+      END IF
+    END IF
+  END DO
 !=====================================================================================
-
-
-
-
-
   CALL INFO( SolverName , 'Done')
  
-
 END SUBROUTINE GroundingLineParaSolver 
 

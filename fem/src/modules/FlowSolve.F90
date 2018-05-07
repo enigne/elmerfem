@@ -1251,8 +1251,8 @@
             ! Determine GL element by looking for the element with opposite signs in the net pressure
             IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
             ! Find GL element
-              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0)  .AND. &
-                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0)) THEN
+              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0.0_dp)  .AND. &
+                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 ! currently only for 2D, 3D need to be implemented on the edges 
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1277,7 +1277,7 @@
                 END DO
     
                 ! Compute the ratio and determine GL position relatively
-                IF ( (GLstressSum*FFstressSum) < 0.0 ) THEN 
+                IF ( (GLstressSum*FFstressSum) < 0.0_dp ) THEN 
                   ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
                 END IF
 
