@@ -235,6 +235,10 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
     BC => GetBC()
     IF ( .NOT. ASSOCIATED(BC) ) CYCLE
 
+    ! Check only for nodes with GroundedMask
+    IF (ANY(GroundedMaskPerm(Element % NodeIndexes(1:n))==0)) CYCLE
+    ! At least one node is on the bedrock
+    IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) < -0.5) ) CYCLE
     ! For GL element which contains GL and FF nodes
     IF ( ALL(Permutation(Element % NodeIndexes) > 0) ) THEN
       IF (((ANY(VariableValues(Permutation(Element % NodeIndexes)) >= 0.0_dp))) .AND. &
