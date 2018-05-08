@@ -138,13 +138,13 @@
 
     INTEGER, POINTER :: GroundingLineParaPerm(:), GroundedMaskPerm(:)
     INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex, smoothingType
-    REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, ratio, bslope, &
+    REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, GLratio, bSlopEle, &
                      weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
-    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:)
+    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:)
 !=========================================================================
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
@@ -164,7 +164,7 @@
        LocalTemperature, GasConstant, HeatCapacity, LocalTempPrev,MU,MV,MW,     &
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
-       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure
+       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope
 
 #ifdef USE_ISO_C_BINDINGS
       REAL(KIND=dp) :: at,at0,at1,totat,st,totst
@@ -324,7 +324,7 @@
                PotentialField, PotentialCoefficient, &
                PSolution, LoadVector, Alpha, Beta, &
                ExtPressure, bedPressure, weaklySlip, &
-               NetPressure, STAT=istat )
+               NetPressure, bSlope, STAT=istat )
        END IF
 
        ALLOCATE( U(N),  V(N),  W(N),                     &
@@ -351,7 +351,8 @@
                  PotentialField( N ), PotentialCoefficient( N ), &
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
                  ExtPressure( N ), bedPressure( N ),     &
-                 weaklySlip( N ), NetPressure( N ), STAT=istat )
+                 weaklySlip( N ), NetPressure( N ), bSlope( N ), &
+                 STAT=istat )
 
        Drag = 0.0d0
        NULLIFY(Pwrk) 
@@ -506,12 +507,21 @@
       IF ( GLParaFlag ) THEN
         ! GroundedMask import
         GroundedMaskVar => VariableGet( Model % Mesh % Variables, 'GroundedMask')
-        GroundedMask => GroundedMaskVar % Values
-        GroundedMaskPerm => GroundedMaskVar % Perm
+        IF ( ASSOCIATED( GroundedMaskVar ) ) THEN
+          GroundedMask => GroundedMaskVar % Values
+          GroundedMaskPerm => GroundedMaskVar % Perm
+        ELSE 
+          CALL Fatal('FlowSolve', 'Could not find the variable GroundedMask for Groundingline parameterization!')
+        END IF
 
+        ! Net pressure import
         GroundingLineVar => VariableGet( Model % Mesh % Variables, 'GroundingLinePara')
-        GroundingLinePara => GroundingLineVar % Values
-        GroundingLineParaPerm => GroundingLineVar % Perm
+        IF ( ASSOCIATED( GroundingLineVar ) ) THEN
+          GroundingLinePara => GroundingLineVar % Values
+          GroundingLineParaPerm => GroundingLineVar % Perm
+        ELSE 
+          CALL Fatal('FlowSolve', 'Could not find the variable GroundingLinePara for Groundingline parameterization!')
+        END IF
       END IF
 
 !=====================================================================================
@@ -1233,26 +1243,28 @@
 !===============================================================================
 !         GL parameterization
 !===============================================================================
-          ratio = 1.0_dp
+          GLratio = 1.0_dp
 
           IF ( GLParaFlag ) THEN
-            ! High-Order integration
+            ! High-Order integration, by default 10th order
             HighOrderGLInt = GetLogical( BC, 'High Order Integration', GotIt)
             IF ( HighOrderGLInt ) THEN
               nIntegration = GetInteger( BC, 'Order of Slip Coefficient', GotIt)
-              IF ( .NOT. GotIt ) nIntegration = 2
+              IF ( .NOT. GotIt ) nIntegration = 10
             ELSE 
-              nIntegration = 2
+              nIntegration = 10
             END IF
 
             ! Parameterize pressure, use water pressure at bedrock for the grounded area in the GL element
             PressureParamFlag = GetLogical( BC, 'Parameterize Pressure', GotIt)
             
             ! Determine GL element by looking for the element with opposite signs in the net pressure
-            IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+            IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) .AND. &
+                 ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)) THEN
             ! Find GL element
               IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0.0_dp)  .AND. &
-                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
+                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) .AND. &
+                   ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5) ) THEN
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 ! currently only for 2D, 3D need to be implemented on the edges 
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1269,19 +1281,19 @@
 
                   cond = GroundingLinePara(GLparaIndex)
                   ! sum up net pressure contributions
-                  IF ( cond < 0 ) THEN
+                  IF ( cond < 0.0_dp ) THEN
                     GLstressSum = GLstressSum + cond
-                  ELSE IF ( cond >= 0) THEN
+                  ELSE IF ( cond >= 0.0_dp ) THEN
                     FFstressSum = FFstressSum + cond
                   END IF
                 END DO
     
                 ! Compute the ratio and determine GL position relatively
                 IF ( (GLstressSum*FFstressSum) < 0.0_dp ) THEN 
-                  ratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
+                  GLratio =  ABS(GLstressSum) / ( ABS(GLstressSum) + ABS(FFstressSum) )
                 END IF
 
-                WRITE ( Message, '(A,I0,A,g15.6)' ) 'GL element found with index =', t, ', ratio is ', ratio
+                WRITE ( Message, '(A,I0,A,g15.6)' ) 'GL element found with index =', t, ', ratio is ', GLratio
                 CALL Info( 'FlowSolve', Message, Level=6 )
 
               END IF
@@ -1292,8 +1304,11 @@
               NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
             END DO
             ! Get corresponding bedrock slop at the current element
-            !!!!!!!! Need to be implemented !!!!!!!! 
-            bslope = -778.5/750.0e3
+            !!!!!!!! Automatic computation need to be added !!!!!!!!
+            bSlope(1:n) = GetReal( BC, 'Bedrock Slope', GotIt )
+            IF (.NOT. Gotit) bSlope(1:n) = 0.0_dp
+
+            bSlopEle = 1.0/ n * SUM(bSlope(1:n))
             outputFlag = .FALSE.
             IF ( iter == 1) outputFlag = .TRUE.
 
@@ -1304,11 +1319,11 @@
 !------------------------------------------------------------------------------
           SELECT CASE( CurrentCoordinateSystem() )
           CASE( Cartesian )
-            IF ( GLParaFlag .AND. (ratio < 1.0_dp) ) THEN
+            IF ( GLParaFlag .AND. (GLratio < 1.0_dp) ) THEN
               CALL NavierStokesBoundaryPara(  STIFF, FORCE, LoadVector, &
                   Alpha, Beta, ExtPressure, bedPressure, SlipCoeff,  &
                   NormalTangential, Element, n, ElementNodes, nIntegration, &
-                  ratio, bslope, outputFlag, PressureParamFlag, NetPressure)
+                  GLratio, bSlopEle, outputFlag, PressureParamFlag, NetPressure)
             ELSE
               CALL NavierStokesBoundary(  STIFF, FORCE, &
                LoadVector, Alpha, Beta, ExtPressure, SlipCoeff, NormalTangential,   &
