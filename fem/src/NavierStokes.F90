@@ -1831,7 +1831,7 @@ MODULE NavierStokes
      END IF
 
 !------------------------------------------------------------------------------
-!    Add to load: given force in normal direction
+!    Add to load: given force in normal direction, normal will point outward
 !------------------------------------------------------------------------------
      Normal = NormalVector( Element, Nodes, u,v,.TRUE. )
 
@@ -1839,20 +1839,20 @@ MODULE NavierStokes
       tanAlpha = - Normal(1) / Normal(2)
       IF ( heaviSide > 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
         ! Grounded
-        CALL tan2Normal2D(bslope, tempNormal)
+        tempNormal = tan2Normal2D(bslope)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), pressure_Integ
+          WRITE (*,*) '+++++++++++++', pressure_Integ, u, Normal, Nodes % x
         END IF
         Normal = tempNormal
 
       ELSE IF ( heaviSide < 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
         ! Floating
         tanTheta = (tanAlpha - ratio*bslope) / (1.0-ratio)
-        CALL tan2Normal2D(tanTheta, tempNormal)   
+        tempNormal = tan2Normal2D(tanTheta)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=============', NodalSlipCoeff(1,1:n), NodalSlipCoeff(2,1:n), pressure_Integ
+          WRITE (*,*) '=============', pressure_Integ, u, Normal, Nodes % x
         END IF
         Normal = tempNormal
       END IF
@@ -1971,19 +1971,19 @@ MODULE NavierStokes
 
 
 
-SUBROUTINE tan2Normal2D ( tanAlpha, normalV )
-  REAL(KIND=dp), INTENT(IN) :: tanAlpha
-  REAL(KIND=dp), INTENT(OUT) :: normalV(3)
+FUNCTION tan2Normal2D ( tanAlpha ) RESULT( normalV )
+  REAL(KIND=dp) :: tanAlpha
+  REAL(KIND=dp) :: normalV(3)
   REAL(KIND=dp) :: x, y
   ! y always pointing downward
   y = - 1.0 / SQRT(1.0+tanAlpha**2)
-  x = - y * tanAlpha
+  x = y * tanAlpha
 
   normalV(1) = x
   normalV(2) = y
   normalV(3) = 0.0
 
-END SUBROUTINE
+END FUNCTION
 
 
 
