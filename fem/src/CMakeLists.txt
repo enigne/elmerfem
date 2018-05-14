@@ -20,7 +20,7 @@ SET(solverlib_SOURCES AddrFunc.F90 NavierStokes.F90 NavierStokesGeneral.F90
   NavierStokesCylindrical.F90 Lists.F90
   DiffuseConvectiveAnisotropic.F90 LoadMod.F90
   DiffuseConvectiveGeneralAnisotropic.F90 PElementMaps.F90
-  PElementBase.F90 ElementDescription.F90 Integration.F90
+  PElementBase.F90 ElementDescription.F90 Integration.F90 ListMatrixArray.F90
   ModelDescription.F90 GeneralUtils.F90 Stress.F90 StressGeneral.F90
   LinearAlgebra.F90 CoordinateSystems.F90 ListMatrix.F90 CRSMatrix.F90
   BandMatrix.F90 BandwidthOptimize.F90 BlockSolve.F90
@@ -38,8 +38,8 @@ SET(solverlib_SOURCES AddrFunc.F90 NavierStokes.F90 NavierStokesGeneral.F90
   ExchangeCorrelations.F90 SolveHypre.c SolverActivate_x.F90
   SolveTrilinos.cxx SolveSuperLU.c iso_varying_string.F90
   umf4_f77wrapper.c VankaCreate.F90 ParticleUtils.F90 Feti.F90
-  cholmod.c InterpolateMeshToMesh.F90 BackwardError.F90
-  LinearForms.F90 H1Basis.F90 CircuitUtils.F90
+  cholmod.c InterpolateMeshToMesh.F90 InterpVarToVar.F90
+  LinearForms.F90 H1Basis.F90 CircuitUtils.F90 BackwardError.F90
   ElmerSolver.F90 MagnetoDynamicsUtils.F90 ComponentUtils.F90)
 
 SET_PROPERTY(SOURCE MaxwellAxiS.F90 PROPERTY
@@ -291,9 +291,11 @@ INSTALL(DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY}/.
 
 IF(WITH_MPI)
   IF(NOT(WIN32))
-    INSTALL(CODE "
-    EXECUTE_PROCESS(COMMAND \${CMAKE_COMMAND} -E create_symlink ElmerSolver_mpi ElmerSolver
-    WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/bin)")
+    # INSTALL(CODE "
+    # EXECUTE_PROCESS(COMMAND \${CMAKE_COMMAND} -E create_symlink ElmerSolver_mpi ElmerSolver
+    # WORKING_DIRECTORY \${CMAKE_INSTALL_PREFIX}/bin)")
+    ADD_CUSTOM_TARGET(elmersolver_link ALL COMMAND ${CMAKE_COMMAND} -E create_symlink ElmerSolver_mpi ElmerSolver)
+    INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/ElmerSolver DESTINATION "bin")
   ELSE()
     INSTALL(CODE "EXECUTE_PROCESS(COMMAND \${CMAKE_COMMAND} -E copy
     \${CMAKE_INSTALL_PREFIX}/bin/ElmerSolver_mpi.exe

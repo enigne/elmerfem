@@ -5,11 +5,13 @@ Header
 End
 
 Simulation
-  Max Output Level = 3
-  Coordinate System = Cartesian
-  Simulation Type = Steady
+  Max Output Level = 5
+  Coordinate System = cartesian
+  Simulation Type = scanning
   Output Intervals(1) = 1
   Steady State Max Iterations = 1
+  timestep intervals(1) = 7
+  timestep sizes(1) = 1
 End
 
 Body 1
@@ -23,6 +25,7 @@ Equation 1 :: Active Solvers(1) = 1
 Solver 1
   Equation = "LinearFormsAssembly"
 
+  P = equals time
   Variable = -global "Variable"
   Variable DOFs = 1
   Procedure = "LinearFormsAssembly" "LinearFormsAssembly"
