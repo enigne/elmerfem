@@ -197,13 +197,13 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
       Fbase = ResidValues((DIM+1)*(ResidPerm(jj)-1)+1 : (DIM+1)*ResidPerm(jj)-1)
 
       ! comparison between water pressure and bed action
-      comp = ABS( SUM( Fwater * Normal ) ) - ABS( SUM( Fbase * Normal ) )
+      comp = ( SUM( Fwater * Normal ) ) + ( SUM( Fbase * Normal ) )
 
       ! Compute water pressure at the bedrock, it could be different from Fwater as
       ! the node is floating
       IF (bedPComputed) THEN
         Fbwater =  (1.0-pParamRatio)*Fbwater +  pParamRatio*HydroValues(HydroDIM*(HydroPerm(jj)-1)+DIM+1 : HydroDIM*HydroPerm(jj))
-        comp = ABS(SUM( Fbwater * Normal ) ) - ABS( SUM( Fbase * Normal ) )
+        comp = (SUM( Fbwater * Normal ) ) + ( SUM( Fbase * Normal ) )
       END IF
       ! Save the difference of loads
       VariableValues( Permutation(Element % NodeIndexes(ii)) ) = comp
