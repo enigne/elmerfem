@@ -435,6 +435,10 @@ CONTAINS
               Circuit % Mre(n,n), Circuit % Mim(n,n)  )
     Circuit % ComponentIds = 0
     Circuit % names = ' '
+    Circuit % A = 0._dp
+    Circuit % B = 0._dp
+    Circuit % Mre = 0._dp
+    Circuit % Mim = 0._dp
 
 !------------------------------------------------------------------------------
   END SUBROUTINE AllocateCircuit
@@ -811,7 +815,7 @@ variable % owner = ParEnv % PEs-1
 
     Circuit => CurrentModel%Circuits(CId)
     n = Circuit % n
-    
+
     ! Read in the coefficient matrices for the circuit equations:
     ! Ax' + Bx = source:
     ! ------------------------------------------------------------
@@ -819,11 +823,13 @@ variable % owner = ParEnv % PEs-1
     CALL matc_get_array('C.'//TRIM(i2s(CId))//'.A'//CHAR(0),Circuit % A,n,n)
     CALL matc_get_array('C.'//TRIM(i2s(CId))//'.B'//CHAR(0),Circuit % B,n,n)
     
-    ! Complex multiplier matrix is used for:
-    ! B = times(M,B), where B times is the element-wise product
-    ! ---------------------------------------------------------
-    CALL matc_get_array('C.'//TRIM(i2s(CId))//'.Mre'//CHAR(0),Circuit % Mre,n,n)
-    CALL matc_get_array('C.'//TRIM(i2s(CId))//'.Mim'//CHAR(0),Circuit % Mim,n,n)
+    IF (Circuit % Harmonic) THEN
+      ! Complex multiplier matrix is used for:
+      ! B = times(M,B), where B times is the element-wise product
+      ! ---------------------------------------------------------
+      CALL matc_get_array('C.'//TRIM(i2s(CId))//'.Mre'//CHAR(0),Circuit % Mre,n,n)
+      CALL matc_get_array('C.'//TRIM(i2s(CId))//'.Mim'//CHAR(0),Circuit % Mim,n,n)
+    END IF
 
 !------------------------------------------------------------------------------
   END SUBROUTINE ReadCoefficientMatrices
