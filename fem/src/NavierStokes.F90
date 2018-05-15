@@ -1980,7 +1980,7 @@ FUNCTION tan2Normal2D ( tanAlpha ) RESULT( normalV )
   REAL(KIND=dp) :: x, y
   ! y always pointing downward
   y = - 1.0 / SQRT(1.0+tanAlpha**2)
-  x = y * tanAlpha
+  x = - y * tanAlpha
 
   normalV(1) = x
   normalV(2) = y
