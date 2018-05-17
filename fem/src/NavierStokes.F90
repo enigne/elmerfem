@@ -1897,15 +1897,9 @@ MODULE NavierStokes
                !=============================================================
                ! 2D only
                IF ( i == 1 ) THEN
-                 IF ( (Nodes % x(n)) >  (Nodes % x(1)) ) THEN
-                     SlipCoeff =   NodalSlipCoeff(i,1) * heaviSide +  &
-                                   NodalSlipCoeff(i,n) * (1.0 - heaviSide)
-                 ELSE
-                     SlipCoeff =   NodalSlipCoeff(i,n) * heaviSide +  &
-                                   NodalSlipCoeff(i,1) * (1.0 - heaviSide)
-                 END IF 
+                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
                ELSE
-                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * 0.5 * ratio
+                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * 0.5 
                END IF
                !=============================================================
              ELSE
