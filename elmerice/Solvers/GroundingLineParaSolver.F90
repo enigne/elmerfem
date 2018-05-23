@@ -149,7 +149,7 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
   ResidValues => VarSurfResidual % Values
 
   ! Load from flow solver
-  VarSurfResidualWeight => VariableGet( Model % Mesh % Variables, 'Flow Solution Weights',UnFoundFatal=UnFoundFatal)
+  VarSurfResidualWeight => VariableGet( Model % Mesh % Variables, 'Flow Solution',UnFoundFatal=UnFoundFatal)
   ResidPermWeight => VarSurfResidualWeight  % Perm
   ResidValuesWeight => VarSurfResidualWeight % Values
 
@@ -290,13 +290,8 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
 
             WRITE(134, *) Time, FFNodeIndex, GLNodeIndex, GLParaPosition, &
                   VariableValues(Permutation(FFNodeIndex)), VariableValues(Permutation(GLNodeIndex)), &
-                  ResidValues((DIM+1)*(ResidPerm(FFNodeIndex)-1)+1 : (DIM+1)*ResidPerm(FFNodeIndex)-1), &
-                  NormalValues(DIM*(NormalPerm(FFNodeIndex)-1)+1 : DIM*NormalPerm(FFNodeIndex)), &
-                  HydroValues(HydroDIM*(HydroPerm(FFNodeIndex)-1)+DIM+1 : HydroDIM*(HydroPerm(FFNodeIndex))), &
-                  ResidValues((DIM+1)*(ResidPerm(GLNodeIndex)-1)+1 : (DIM+1)*ResidPerm(GLNodeIndex)-1), &
-                  NormalValues(DIM*(NormalPerm(GLNodeIndex)-1)+1 : DIM*NormalPerm(GLNodeIndex)), &
-                  HydroValues(HydroDIM*(HydroPerm(GLNodeIndex)-1)+DIM+1 : HydroDIM*(HydroPerm(GLNodeIndex))) ,&
-                  ResidValuesWeight(ResidPermWeight(FFNodeIndex)), ResidValuesWeight(ResidPermWeight(GLNodeIndex))
+                  ResidValuesWeight((DIM+1)*(ResidPermWeight(FFNodeIndex)-1)+1: (DIM+1)*(ResidPermWeight(FFNodeIndex))), &
+                  ResidValuesWeight((DIM+1)*(ResidPermWeight(GLNodeIndex)-1)+1: (DIM+1)*(ResidPermWeight(GLNodeIndex)))
             CLOSE(134)
           END IF
         ELSE

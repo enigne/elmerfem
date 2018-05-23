@@ -1845,7 +1845,7 @@ MODULE NavierStokes
         tempNormal = tan2Normal2D(bslope)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++', pressure_Integ, NodalSlipCoeff(1,1:n), NodalSlipCoeff(2, 1:n), Nodes % x
+          WRITE (*,*) '+++++++++++++', Normal, tempNormal
         END IF
         Normal = tempNormal
 
@@ -1855,7 +1855,7 @@ MODULE NavierStokes
         tempNormal = tan2Normal2D(tanTheta)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=============', pressure_Integ, NodalSlipCoeff(1,1:n), NodalSlipCoeff(2, 1:n), Nodes % x
+          WRITE (*,*) '=============', Normal, tempNormal
         END IF
         Normal = tempNormal
       END IF
