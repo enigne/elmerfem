@@ -139,10 +139,12 @@
     INTEGER, POINTER :: GroundingLineParaPerm(:), GroundedMaskPerm(:)
     INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex, smoothingType
     REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, GLratio, bSlopEle, &
-                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange
+                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange, &
+                     betaReduced
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
-               weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE.
+               weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE., &
+               NormalParamFlag = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
     REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:)
 !=========================================================================
@@ -1280,7 +1282,16 @@
 
             ! Parameterize pressure, use water pressure at bedrock for the grounded area in the GL element
             PressureParamFlag = GetLogical( BC, 'Parameterize Pressure', GotIt)
-            
+            IF ( .NOT. GotIt ) PressureParamFlag = .TRUE.
+
+            ! Parameterize noraml vector in GL element
+            NormalParamFlag = GetLogical( BC, 'Parameterize Normal Vector', GotIt)
+            IF ( .NOT. GotIt ) NormalParamFlag = .TRUE.
+
+            ! reduce beta in the intergal in GL element, test only!!!!
+            betaReduced = GetConstReal(BC, 'Reduce Beta Factor', GotIt)
+            IF ( .NOT. GotIt ) betaReduced = 0.5
+
             ! Determine GL element by looking for the element with opposite signs in the net pressure
             IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) .AND. &
                  ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)) THEN
@@ -1346,7 +1357,8 @@
               CALL NavierStokesBoundaryPara(  STIFF, FORCE, LoadVector, &
                   Alpha, Beta, ExtPressure, bedPressure, SlipCoeff,  &
                   NormalTangential, Element, n, ElementNodes, nIntegration, &
-                  GLratio, bSlopEle, outputFlag, PressureParamFlag, NetPressure)
+                  GLratio, bSlopEle, outputFlag, PressureParamFlag, &
+                  NormalParamFlag, NetPressure, betaReduced)
             ELSE
               CALL NavierStokesBoundary(  STIFF, FORCE, &
                LoadVector, Alpha, Beta, ExtPressure, SlipCoeff, NormalTangential,   &

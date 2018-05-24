@@ -1685,7 +1685,7 @@ MODULE NavierStokes
  SUBROUTINE NavierStokesBoundaryPara( BoundaryMatrix,BoundaryVector,LoadVector,   &
     NodalAlpha, NodalBeta, NodalExtPressure, NodalBedPressure, NodalSlipCoeff,  &
     NormalTangential, Element, n, Nodes, nIntegration, ratio, bslope, outputFlag, &
-    PressureParamFlag, NodalNetPressure)
+    PressureParamFlag, NormalParamFlag, NodalNetPressure, betaReduced)
              
 !------------------------------------------------------------------------------
 !     Assemble boundary matrix and RHS for slip boundary conditions
@@ -1726,6 +1726,8 @@ MODULE NavierStokes
    REAL(KIND=dp), INTENT(IN)            :: bslope
    LOGICAL, INTENT(IN)                  :: outputFlag
    LOGICAL, INTENT(IN)                  :: PressureParamFlag
+   LOGICAL, INTENT(IN)                  :: NormalParamFlag
+   REAL(KIND=dp), INTENT(IN)            :: betaReduced
 !------------------------------------------------------------------------------
 !  Local variables
 !------------------------------------------------------------------------------
@@ -1839,6 +1841,7 @@ MODULE NavierStokes
      Normal = NormalVector( Element, Nodes, u,v,.TRUE. )
 
      ! Adjust Noraml direction according to the parameterization
+     IF (NormalParamFlag) THEN
       tanAlpha = - Normal(1) / Normal(2)
       IF ( heaviSide > 0.5 .AND. (ratio < 1.0) .AND. (ratio > 0.0) )  THEN
         ! Grounded
@@ -1859,6 +1862,7 @@ MODULE NavierStokes
         END IF
         Normal = tempNormal
       END IF
+    END IF
 
 
      IF ( NormalTangential ) THEN
