@@ -1204,7 +1204,7 @@
             weaklySlip(1:n) =  SlipCoeff(1,1:n)
             ! user input coefficients
             weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
-            IF ( .NOT. GotIt ) weaklyMu = 1.0e6
+            IF ( .NOT. GotIt ) weaklyMu = 1.0e6 ! /hk ???
 
             ! Check for the node with masks
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
