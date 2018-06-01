@@ -91,13 +91,7 @@ SUBROUTINE GroundedSolver( Model,Solver,dt,TransientSimulation )
   CHARACTER(LEN=MAX_NAME_LEN) :: SolverName = 'GroundedSolver', bedrockName
 
   INTEGER,PARAMETER :: MATERIAL_DEFAULT = 1, MATERIAL_NAMED = 2, VARIABLE = 3
-
-!=============================================================  
-  TYPE(variable_t), POINTER :: GroundingLineParaVar
-  REAL(KIND=dp), POINTER :: GroundingLinePara(:)
-  INTEGER, POINTER :: GroundingLineParaPerm(:)
-!=============================================================  
-
+       
   SAVE AllocationsDone, DIM, SolverName, zb, toler
   !------------------------------------------------------------------------------
 
@@ -145,10 +139,7 @@ SUBROUTINE GroundedSolver( Model,Solver,dt,TransientSimulation )
      END IF
   END IF
 
-!======== Check stress&water pressure to switch grounded <-> floating ========
-  ! GroundingLineParaVar => VariableGet( Model % Mesh % Variables, 'GroundingLinePara', UnFoundFatal=UnFoundFatal)
-  ! GroundingLinePara => GroundingLineParaVar % Values
-  ! GroundingLineParaPerm => GroundingLineParaVar % Perm
+
     
   !--------------------------------------------------------------
   ! Grounded/floating loop based on height of base above bedrock.
@@ -200,8 +191,6 @@ SUBROUTINE GroundedSolver( Model,Solver,dt,TransientSimulation )
         END IF
      END DO
   END DO
-!=============================================================================
-
   
   !--------------------------------------------------------------
   ! Grounding line loop to label grounded points at grounding Line.

@@ -61,7 +61,7 @@ FUNCTION SlidCoef_Contact ( Model, nodenumber, y) RESULT(Bdrag)
        DistancePerm(:), FrictionPerm(:)
   INTEGER :: nodenumber, ii, DIM, GL_retreat, n, tt, Nn, jj, MSum, ZSum
 
-  LOGICAL :: FirstTime = .TRUE., GotIt, Yeschange, GLmoves, Friction,UnFoundFatal=.TRUE., checkContactEveryIter=.FALSE.
+  LOGICAL :: FirstTime = .TRUE., GotIt, Yeschange, GLmoves, Friction, UnFoundFatal=.TRUE.
 
   REAL (KIND=dp) ::  y, relChange, relChangeOld, Sliding_Budd, Sliding_Weertman, Friction_Coulomb
 
@@ -161,11 +161,6 @@ FUNCTION SlidCoef_Contact ( Model, nodenumber, y) RESULT(Bdrag)
         CALL INFO( USF_Name, 'This works with the DistanceSolver', Level=3)
      ELSE
         CALL INFO( USF_Name, 'far inland nodes will not detach', level=3)
-     END IF
-
-     checkContactEveryIter = GetLogical( BC, 'Compute Contact in every Nonlinear iteration', GotIt ) 
-     IF (.NOT.GotIt) THEN
-       checkContactEveryIter = .FALSE.
      END IF
   ENDIF
   

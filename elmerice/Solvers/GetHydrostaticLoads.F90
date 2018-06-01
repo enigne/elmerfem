@@ -144,12 +144,15 @@ SUBROUTINE GetHydrostaticLoads( Model,Solver,dt,TransientSimulation )
     IF(.NOT. ANY(Permutation(Element % NodeIndexes(1:n)) > 0)) CYCLE
 
     BC => GetBC( Element ) 
+    ! Get water pressure on the bedrock
+    IF (bedPComputed) THEN
+      pbt(1:n) =  -1.0 * ListGetReal(BC, 'Bedrock Pressure', n, &
+                    Element % NodeIndexes , GotIt)
+      IF(.NOT. GotIt) pbt(1:n) = 0.0
+    END IF
+
     pwt(1:n) =  -1.0 * ListGetReal(BC, 'External Pressure', n, &
                     Element % NodeIndexes , GotIt)
-
-    pbt(1:n) =  -1.0 * ListGetReal(BC, 'Bedrock Pressure', n, &
-                    Element % NodeIndexes , GotIt)
-
 
     !Is there an external pressure to consider?
     IF(.NOT. GotIt) CYCLE
@@ -170,12 +173,12 @@ SUBROUTINE GetHydrostaticLoads( Model,Solver,dt,TransientSimulation )
 !  Value of pwt at integration point
 !
       pwi = SUM(pwt(1:n)*Basis(1:n))
-      pbi = SUM(pbt(1:n)*Basis(1:n))
+      IF (bedPComputed) pbi = SUM(pbt(1:n)*Basis(1:n))
 !
 ! Compute pw_x, pw_y, pw_z
 !
       PwVector(1:DIM) = pwi * Normal(1:DIM)
-      PbVector(1:DIM) = pbi * Normal(1:DIM)
+      IF (bedPComputed) PbVector(1:DIM) = pbi * Normal(1:DIM)
 
       DO i = 1, n
         Nn = Permutation(Element % NodeIndexes(i))
