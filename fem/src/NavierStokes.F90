@@ -1904,7 +1904,7 @@ MODULE NavierStokes
                  SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
                ELSE
                  IF ( (NodalNetPressure(p) > 0.0) .AND. (NodalNetPressure(q) > 0.0) ) THEN
-                   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced * 0.5 
+                   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced  
                  ELSE
                    SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced 
                    ! multiplied by a factor of h, as h ->0, this term goes to 0

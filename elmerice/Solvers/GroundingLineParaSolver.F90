@@ -53,7 +53,7 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
   ! Local variables
   !------------------------------------------------------------------------------
 
-  TYPE(Element_t), POINTER :: Element
+  TYPE(Element_t), POINTER :: Element, CurElement
   TYPE(ValueList_t), POINTER :: Material, SolverParams
   TYPE(Variable_t), POINTER :: PointerToVariable
   TYPE(variable_t), POINTER :: NormalVar, VarSurfResidual, GroundedMaskVar, HydroVar, VarSurfResidualWeight
@@ -69,7 +69,7 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
   INTEGER, POINTER :: Permutation(:), GroundedMaskPerm(:)
   INTEGER, POINTER :: NormalPerm(:), ResidPerm(:), HydroPerm(:), ResidPermWeight(:)
 
-  INTEGER :: DIM, HydroDIM, tt, ii, jj, n, GLnodenumber
+  INTEGER :: DIM, HydroDIM, tt, ii, jj, n, GLnodenumber, GL_retreat, Nn, MSum, ZSum
 
   LOGICAL:: FirstTime = .TRUE., bedPComputed = .FALSE., UnFoundFatal
 
@@ -173,6 +173,9 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
     bedPComputed = .FALSE.
   END IF
 
+  ! ! Retreat of the Grounding line if Hydro loads higher than residual values
+  ! GL_retreat = 0
+
   ! Loop over each boundary element
   DO tt = 1, Model % NumberOfBoundaryElements   
     ! Get boundary element
@@ -207,13 +210,66 @@ SUBROUTINE GroundingLineParaSolver( Model,Solver,dt,TransientSimulation )
       END IF
       ! Save the difference of loads
       VariableValues( Permutation(Element % NodeIndexes(ii)) ) = comp
-    END DO
-     
 
+      ! ! Adjust Grounded mask according to the net pressure
+      ! Nn = GroundedMaskPerm(Element % NodeIndexes(ii))
+      
+      ! ! the grounded mask is not defined here
+      ! IF (Nn==0) CYCLE
+      ! IF (GroundedMask(Nn) < -0.5_dp) CYCLE
+
+      ! IF (comp .GE. 0.0_dp) THEN
+      !   GroundedMask(Nn) = -1.0_dp
+      !   GL_retreat = GL_retreat + 1
+      !   PRINT *, 'Retreat of the Grounding Line : '
+      !   PRINT *, Nodes % x(ii), Nodes % y(ii), Nodes % z(ii)
+      ! END IF
+    END DO
   END DO
 
   IF ( ParEnv % PEs>1 ) CALL ParallelSumVector( Solver % Matrix, VariableValues, 1 )
- 
+
+
+  ! ! Some 0 (Grounding line) may have been replaced by -1 (floating nodes)
+  ! IF (GL_retreat.GT.0) THEN
+  !   CurElement => Model % CurrentElement
+  !   DO tt = 1, Model % NumberOfBoundaryElements
+       
+  !      Element => GetBoundaryElement(tt)
+  !      IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
+  !      n = GetElementNOFNodes(Element)
+       
+  !      CALL GetElementNodes(Nodes, Element)
+  !      MSum = 0
+  !      ZSum = 0
+       
+  !      IF (ANY(GroundedMaskPerm(Element % NodeIndexes(1:n))==0)) CYCLE
+  !      DO ii = 1,n
+          
+  !         Nn = GroundedMaskPerm(Element % NodeIndexes(ii))
+  !         ! the grounded mask is not defined here
+  !         IF (Nn==0) CYCLE
+  !         MSum = MSum + INT(GroundedMask(Nn))
+  !         IF (GroundedMask(Nn)==0.0_dp) ZSum = ZSum + 1
+          
+  !      END DO
+       
+  !      IF (MSum+ZSum .LT. n) THEN
+  !         DO ii=1,n
+  !            Nn = GroundedMaskPerm(Element % NodeIndexes(ii))
+  !            IF (Nn==0) CYCLE
+             
+  !            IF (GroundedMask(Nn)==1.0_dp) THEN
+  !               GroundedMask(Nn)=0.0_dp
+  !            END IF
+
+  !         END DO
+  !      END IF
+       
+  !   END DO
+  !   Model % CurrentElement => CurElement
+  ! END IF
+
 !======================= Compute parameterized GL position ==========================
 ! Make GL position available for next time step 
 !!!!!! currently only work for 2D problem

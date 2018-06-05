@@ -1210,7 +1210,8 @@
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
                  ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
               ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp)) THEN
+              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND.  & 
+                   ALL(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) <= 0.0_dp) ) THEN
                 DO jj = 1, n
                   weaklySlip(jj) = weaklyMu
                 END DO 
@@ -1221,9 +1222,9 @@
                    ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
                 DO jj = 1, n
                   ! GL nodes with positive net pressure, can move upwards
-                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
+                  ! IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
                     weaklySlip(jj) = SlipCoeff(1,jj) 
-                  END IF
+                  ! END IF
                 END DO 
               END IF
             END IF

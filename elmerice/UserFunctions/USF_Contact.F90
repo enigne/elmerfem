@@ -69,6 +69,13 @@ FUNCTION SlidCoef_Contact ( Model, nodenumber, y) RESULT(Bdrag)
   CHARACTER(LEN=MAX_NAME_LEN) :: USF_Name='SlidCoef_Contact', Sl_Law, GLtype, FrictionVarName
   CHARACTER(LEN=MAX_NAME_LEN) :: FlowLoadsName, FlowSolutionName
 
+!=============================================================  
+  TYPE(variable_t), POINTER :: GroundingLineParaVar
+  REAL(KIND=dp), POINTER :: GroundingLinePara(:)
+  INTEGER, POINTER :: GroundingLineParaPerm(:)
+  LOGICAL :: specialCaseFlag
+!=============================================================  
+
   SAVE FirstTime, yeschange, told, GLmoves, thresh, GLtype, TestContact
   SAVE DIM, USF_Name, Normal, Fwater, Fbase, relChangeOld, Sl_Law
   SAVE FrictionVar, FrictionValues, FrictionPerm, BC, FlowLoadsName
@@ -346,6 +353,51 @@ FUNCTION SlidCoef_Contact ( Model, nodenumber, y) RESULT(Bdrag)
      CASE('discontinuous')
         BoundaryElement => Model % CurrentElement
         IF (ALL(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))>-0.5)) Friction = .TRUE. 
+     !=============================================================
+     CASE('parameterization')
+        ! Parameterize GL
+        GroundingLineParaVar => VariableGet( Model % Mesh % Variables, 'GroundingLinePara', UnFoundFatal=UnFoundFatal)
+        GroundingLinePara => GroundingLineParaVar % Values
+        GroundingLineParaPerm => GroundingLineParaVar % Perm
+
+
+        BoundaryElement => Model % CurrentElement
+        ! Pure Grounded Element (especially for the first time step, GLpara=0)
+        IF (ALL(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) Friction = .TRUE. 
+
+        ! At least one node is on the bedrock
+        IF ( ANY(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) THEN
+          IF ( GroundingLineParaPerm(nodenumber) > 0) THEN
+            ! Set friction for the element with at least one node at the bed, then check
+            Friction = .TRUE.
+
+            ! Take away exceptions, contact but no pressure towards the bedrock
+            IF ( ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0) ) Friction = .FALSE.
+
+            ! Contact and has pressure downward
+            IF ( (GroundingLinePara(GroundingLineParaPerm(nodenumber)) < 0.0) .AND. &
+                 (GroundedMask(GroundedMaskPerm(nodenumber)) > -0.5) ) Friction = .TRUE.
+
+            ! ----> GL element with grounded and floating nodes
+            IF ( ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0)  .AND. &
+                 ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) < 0.0)) THEN
+              ! Generally this is the GL element
+              Friction = .TRUE.
+
+              specialCaseFlag = .TRUE.
+              ! One special case: no the grounded node has downward net pressure 
+              n = GetElementNOFNodes()
+              DO ii = 1, n
+                jj = BoundaryElement % NodeIndexes(ii)
+                IF ( (GroundedMask(GroundedMaskPerm(jj)) > -0.5) .AND. (GroundingLinePara(GroundingLineParaPerm(jj)) < 0.0 ) )  THEN
+                  specialCaseFlag = .FALSE.
+                END IF
+              END DO
+              IF (specialCaseFlag) Friction = .FALSE.
+            END IF
+          END IF
+        END IF
+     !=============================================================
      CASE DEFAULT
         WRITE(Message, '(A,A)') 'GL type not recognised ', GLtype 
         CALL FATAL( USF_Name, Message)
@@ -397,18 +449,10 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
   REAL(KIND=dp) :: Bdrag, t, told, thresh
   REAL(KIND=dp), ALLOCATABLE :: Normal(:), Fwater(:), Fbwater(:), Fbase(:)
 
-!=============================================================
-  REAL(KIND=dp) :: GLBdrag, FFstressSum, betaSum, GLstressSum
-  INTEGER :: GLnodenumber, FFnodenumber, HydroDIM
-
-  REAL(KIND=dp) :: BedPressure, SeaPressure, bpressure, compB, ratio, GLNodeX, FFNodeX, GLParaPosition
-  LOGICAL::  checkContactEveryIter=.FALSE.
-  REAL(KIND=dp), ALLOCATABLE :: GLstress(:), FFstress(:)
-  INTEGER :: countGL, countFF
 !=============================================================  
   TYPE(variable_t), POINTER :: GroundingLineParaVar
   REAL(KIND=dp), POINTER :: GroundingLinePara(:)
-   INTEGER, POINTER :: GroundingLineParaPerm(:)
+  INTEGER, POINTER :: GroundingLineParaPerm(:)
 !=============================================================  
   INTEGER, POINTER :: NormalPerm(:), ResidPerm(:), GroundedMaskPerm(:), HydroPerm(:), DistancePerm(:)
   INTEGER :: nodenumber, ii, DIM, GL_retreat, n, tt, Nn, jj, MSum, ZSum
@@ -422,8 +466,6 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
 
   SAVE FirstTime, yeschange, told, GLmoves, thresh, GLtype, TestContact
   SAVE DIM, USF_Name, Normal, Fwater, Fbwater, Fbase, relChangeOld, Sl_Law
-!=============================================================
-  SAVE HydroDIM 
 !=============================================================
 
 !----------------------------------------------------------------------------
@@ -508,11 +550,6 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
         CALL INFO( USF_Name, 'far inland nodes will not detach', level=3)
      END IF
 
-     checkContactEveryIter = GetLogical( BC, 'Compute Contact in every Nonlinear iteration', GotIt ) 
-     IF (.NOT.GotIt) THEN
-       checkContactEveryIter = .FALSE.
-     END IF
-
   ENDIF
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -534,12 +571,7 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
   END IF
 !=================================================  
   Element => Model % CurrentElement
-  n = GetElementNOFNodes(Element)
-  IF (.NOT. ASSOCIATED(Element % propertydata)) THEN
-    ALLOCATE( Element % propertydata )
-    ALLOCATE( Element % propertydata % values(n*3) )   
-    Element % propertydata % values(:) = 0.0_dp
-  END IF      
+  n = GetElementNOFNodes(Element)    
   
   IF (GroundedMaskPerm(nodenumber) > 0) THEN
   ! for the bottom surface, where the GroundedMask is defined
@@ -593,7 +625,7 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
               ! One special case: no the grounded node has downward net pressure 
               n = GetElementNOFNodes()
               DO ii = 1, n
-                jj = Element % NodeIndexes(ii)
+                jj = BoundaryElement % NodeIndexes(ii)
                 IF ( (GroundedMask(GroundedMaskPerm(jj)) > -0.5) .AND. (GroundingLinePara(GroundingLineParaPerm(jj)) < 0.0 ) )  THEN
                   specialCaseFlag = .FALSE.
                 END IF
