@@ -92,6 +92,15 @@ SUBROUTINE GroundedSolver( Model,Solver,dt,TransientSimulation )
 
   INTEGER,PARAMETER :: MATERIAL_DEFAULT = 1, MATERIAL_NAMED = 2, VARIABLE = 3
        
+!=============================================================  
+  TYPE(variable_t), POINTER :: GroundingLineParaVar
+  REAL(KIND=dp), POINTER :: GroundingLinePara(:)
+  INTEGER, POINTER :: GroundingLineParaPerm(:)
+  LOGICAL :: checkGLParam = .FALSE.
+  INTEGER :: GL_retreat, j
+  REAL(KIND=dp) :: comp
+!=============================================================  
+
   SAVE AllocationsDone, DIM, SolverName, zb, toler
   !------------------------------------------------------------------------------
 
@@ -229,6 +238,91 @@ SUBROUTINE GroundedSolver( Model,Solver,dt,TransientSimulation )
   
   IF ( ParEnv % PEs>1 ) CALL ParallelSumVector( Solver % Matrix, VariableValues, 1 )
  
+  ! =================================================================================================================
+  ! Check for using Parameterization
+  checkGLParam = GetLogical(SolverParams, 'Use Grounding Line Parameterization', GotIt )
+  IF (.NOT.GotIt) checkGLParam = .FALSE.
+  IF ( checkGLParam ) THEN
+    ! Load GL param info
+    GroundingLineParaVar => VariableGet( Model % Mesh % Variables, 'GroundingLinePara', UnFoundFatal=UnFoundFatal)
+    GroundingLinePara => GroundingLineParaVar % Values
+    GroundingLineParaPerm => GroundingLineParaVar % Perm
+
+    ! Check for retreat 
+    DO t = 1, Model % NumberOfBoundaryElements
+
+      Element => GetBoundaryElement(t)
+      IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
+      n = GetElementNOFNodes(Element)
+
+      CALL GetElementNodes(Nodes, Element)
+
+      IF (ANY(Permutation(Element % NodeIndexes(1:n))==0)) CYCLE
+      DO i = 1,n
+
+         Nn = Permutation(Element % NodeIndexes(i))
+         ! the grounded mask is not defined here
+         IF (Nn==0) CYCLE
+         IF (VariableValues(Nn) < -0.5_dp) CYCLE
+         
+         j = Element % NodeIndexes(i)
+         
+         ! Load GL param value        
+         IF (GroundingLineParaPerm(j) == 0) CYCLE
+
+         comp = GroundingLinePara(GroundingLineParaPerm(j))
+         
+         IF (comp .GT. 0.0_dp) THEN
+           VariableValues(Nn) = -1.0_dp
+           GL_retreat = GL_retreat + 1
+           PRINT *, 'Retreat of the Grounding Line : '
+           PRINT *, Nodes % x(i), Nodes % y(i), Nodes % z(i)
+         END IF
+      END DO
+    END DO
+
+     ! with the previous step
+     ! Some 0 (Grounding line) may have been replaced by -1 (floating nodes)
+     ! here replacement of some 1 by 0's
+    IF (GL_retreat.GT.0) THEN
+      DO t = 1, Model % NumberOfBoundaryElements
+         
+         Element => GetBoundaryElement(t)
+         IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
+         n = GetElementNOFNodes(Element)
+         
+         CALL GetElementNodes(Nodes, Element)
+         MSum = 0
+         ZSum = 0
+         
+         IF (ANY(Permutation(Element % NodeIndexes(1:n))==0)) CYCLE
+         DO i = 1,n
+            
+            Nn = Permutation(Element % NodeIndexes(i))
+            ! the grounded mask is not defined here
+            IF (Nn==0) CYCLE
+            MSum = MSum + INT(VariableValues(Nn))
+            IF (VariableValues(Nn)==0.0_dp) ZSum = ZSum + 1
+            
+         END DO
+         
+         IF (MSum+ZSum .LT. n) THEN
+            DO i=1,n
+               Nn = Permutation(Element % NodeIndexes(i))
+               IF (Nn==0) CYCLE
+               
+               IF (VariableValues(Nn)==1.0_dp) THEN
+                  VariableValues(Nn)=0.0_dp
+               END IF
+            END DO
+         END IF
+      END DO
+    END IF
+  END IF
+
+  ! =================================================================================================================
+
+
   CALL INFO( SolverName , 'Done')
  
 END SUBROUTINE GroundedSolver 
