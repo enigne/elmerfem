@@ -139,14 +139,14 @@
     INTEGER, POINTER :: GroundingLineParaPerm(:), GroundedMaskPerm(:)
     INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex, smoothingType
     REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, GLratio, bSlopEle, &
-                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange, &
-                     betaReduced
+                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE., &
                NormalParamFlag = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
-    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:)
+    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:), &
+                     betaReduced(:)
 !=========================================================================
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
@@ -166,7 +166,7 @@
        LocalTemperature, GasConstant, HeatCapacity, LocalTempPrev,MU,MV,MW,     &
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
-       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope
+       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope, betaReduced
 
 #ifdef USE_ISO_C_BINDINGS
       REAL(KIND=dp) :: at,at0,at1,totat,st,totst
@@ -328,7 +328,7 @@
                PotentialField, PotentialCoefficient, &
                LoadVector, Alpha, Beta, &
                ExtPressure, bedPressure, weaklySlip, &
-               NetPressure, bSlope, STAT=istat )
+               NetPressure, bSlope, betaReduced, STAT=istat )
 
        END IF
 
@@ -357,7 +357,7 @@
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
                  ExtPressure( N ), bedPressure( N ),     &
                  weaklySlip( N ), NetPressure( N ), bSlope( N ), &
-                 STAT=istat )
+                 betaReduced( N ), STAT=istat )
 
        Drag = 0.0d0
        NULLIFY(Pwrk) 
@@ -1290,9 +1290,15 @@
             IF ( .NOT. GotIt ) NormalParamFlag = .TRUE.
 
             ! reduce beta in the intergal in GL element, test only!!!!
-            betaReduced = GetConstReal(BC, 'Reduce Beta Factor', GotIt)
-            IF ( .NOT. GotIt ) betaReduced = 0.5
-
+            betaReduced(1:n) = GetReal(BC, 'Reduce Beta Factor', GotIt)
+            IF ( .NOT. GotIt ) THEN
+              ! index 1: grounded
+              betaReduced(1) = GetConstReal(BC, 'Reduce Beta Factor Grounded', GotIt)
+              IF ( .NOT. GotIt ) betaReduced(1) = 1.0
+              ! index n: floating
+              betaReduced(n) = GetConstReal(BC, 'Reduce Beta Factor Floating', GotIt)
+              IF ( .NOT. GotIt ) betaReduced(n) = 0.5
+            END IF
             ! Determine GL element by looking for the element with opposite signs in the net pressure
             IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) .AND. &
                  ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)) THEN

@@ -1727,7 +1727,7 @@ MODULE NavierStokes
    LOGICAL, INTENT(IN)                  :: outputFlag
    LOGICAL, INTENT(IN)                  :: PressureParamFlag
    LOGICAL, INTENT(IN)                  :: NormalParamFlag
-   REAL(KIND=dp), INTENT(IN)            :: betaReduced
+   REAL(KIND=dp), INTENT(IN)            :: betaReduced(:)
 !------------------------------------------------------------------------------
 !  Local variables
 !------------------------------------------------------------------------------
@@ -1848,7 +1848,7 @@ MODULE NavierStokes
         tempNormal = tan2Normal2D(bslope)
 
         IF (outputFlag) THEN
-          WRITE (*,*) '+++++++++++++', Normal, tempNormal
+          WRITE (*,*) '+++++++++++++', Normal, tempNormal, betaReduced(1:n)
         END IF
         Normal = tempNormal
 
@@ -1858,7 +1858,7 @@ MODULE NavierStokes
         tempNormal = tan2Normal2D(tanTheta)   
 
         IF (outputFlag) THEN
-          WRITE (*,*) '=============', Normal, tempNormal
+          WRITE (*,*) '=============', Normal, tempNormal, betaReduced(1:n)
         END IF
         Normal = tempNormal
       END IF
@@ -1904,9 +1904,9 @@ MODULE NavierStokes
                  SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
                ELSE
                  IF ( (NodalNetPressure(p) > 0.0) .AND. (NodalNetPressure(q) > 0.0) ) THEN
-                   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced  
+                   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced(n)
                  ELSE
-                   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced 
+                   SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * heaviSide * betaReduced(1)
                    ! multiplied by a factor of h, as h ->0, this term goes to 0
                  END IF
                END IF
