@@ -89,7 +89,7 @@
 
      TYPE(ValueList_t),POINTER :: Material, BC, BodyForce, Equation
      TYPE(Nodes_t) :: ElementNodes
-     TYPE(Element_t),POINTER :: Element
+     TYPE(Element_t),POINTER :: Element, ParentElement, CurElement
 
      REAL(KIND=dp) :: RelativeChange,UNorm,Gravity(3),AngularVelocity(3), &
        Tdiff,s,Relaxation,NewtonTol,NewtonUBound,NonlinearTol, &
@@ -146,7 +146,7 @@
                NormalParamFlag = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
     REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:), &
-                     betaReduced(:)
+                     betaReduced(:), EpsilonBoundary(:)
 !=========================================================================
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
@@ -166,7 +166,8 @@
        LocalTemperature, GasConstant, HeatCapacity, LocalTempPrev,MU,MV,MW,     &
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
-       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope, betaReduced
+       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope, betaReduced, &
+       EpsilonBoundary
 
 #ifdef USE_ISO_C_BINDINGS
       REAL(KIND=dp) :: at,at0,at1,totat,st,totst
@@ -328,7 +329,8 @@
                PotentialField, PotentialCoefficient, &
                LoadVector, Alpha, Beta, &
                ExtPressure, bedPressure, weaklySlip, &
-               NetPressure, bSlope, betaReduced, STAT=istat )
+               NetPressure, bSlope, betaReduced, EpsilonBoundary, &
+               STAT=istat )
 
        END IF
 
@@ -357,7 +359,7 @@
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
                  ExtPressure( N ), bedPressure( N ),     &
                  weaklySlip( N ), NetPressure( N ), bSlope( N ), &
-                 betaReduced( N ), STAT=istat )
+                 betaReduced( N ), EpsilonBoundary( N ), STAT=istat )
 
        Drag = 0.0d0
        NULLIFY(Pwrk) 
@@ -1353,6 +1355,46 @@
             outputFlag = .FALSE.
             IF ( iter == 1) outputFlag = .TRUE.
 
+            !=======================================================================
+            !             Nitsche's method
+            !=======================================================================
+            CurElement => Model % CurrentElement
+
+            ! Get the parent element since derivatives of the basis functions are needed
+            ParentElement => Element % BoundaryInfo % Left
+            IF ( .NOT. ASSOCIATED( ParentElement ) ) &
+               ParentElement => Element % BoundaryInfo % Right
+            
+            n = GetElementNOFnodes( Element )
+            k = GetElementNOFnodes( ParentElement )
+
+            EpsilonBoundary(1:n) = GetReal( BC, 'e', GotIt )
+            IF (.NOT. GotIt) EpsilonBoundary(1:n) = 0.0_dp
+
+            SELECT CASE( NSDOFs )
+              CASE(3)
+                U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
+                V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
+                W(1:n) = 0.0_dp
+              CASE(4)
+                U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-3)
+                V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
+                W(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
+            END SELECT
+
+            Density(1:k)   = GetParentMatProp( 'Density' )
+            Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
+
+            CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
+              Element, ParentElement, n, k, nIntegration, EpsilonBoundary, &
+              Viscosity, Density, U, V, W, GLratio)
+            
+            ! CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement)
+
+            Model % CurrentElement => CurElement 
+            STIFF = 0.0d0
+            FORCE = 0.0d0
+            !=======================================================================
           END IF
 !===============================================================================
 

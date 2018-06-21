@@ -1740,7 +1740,7 @@ MODULE NavierStokes
    REAL(KIND=dp) :: u,v,w,ParentU,ParentV,ParentW,s,x(n),y(n),z(n)
    REAL(KIND=dp), POINTER :: U_Integ(:),V_Integ(:),W_Integ(:),S_Integ(:)
    REAL(KIND=dp) :: TangentForce(3),Force(3),Normal(3),Tangent(3),Tangent2(3), &
-               Vect(3), Alpha, mu,Grad(3,3),Velo(3), tempNormal(3), tempPressure(n)
+               Vect(3), Alpha, mu, Grad(3,3),Velo(3), tempNormal(3), tempPressure(n)
 
    REAL(KIND=dp) :: xx, yy, ydot, ydotdot, MassFlux, heaviSide, tanAlpha, tanTheta
    REAL(KIND=dp) :: pressure_Integ
@@ -1972,6 +1972,130 @@ MODULE NavierStokes
    END DO
 !------------------------------------------------------------------------------
  END SUBROUTINE NavierStokesBoundaryPara
+!------------------------------------------------------------------------------
+
+!------------------------------------------------------------------------------
+SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
+                                n, k, nIntegration, EpsilonBoundary, Nodalmu, &
+                                Nodalrho, Ux, Uy, Uz, ratio )
+   
+  USE ElementUtils
+
+  IMPLICIT NONE
+  REAL(KIND=dp), INTENT(INOUT)         :: STIFF(:,:), FORCE(:)
+  REAL(KIND=dp), INTENT(IN)            :: LOAD(:,:), EpsilonBoundary(:)
+  TYPE(Element_t), POINTER, INTENT(IN) :: Element, ParentElement
+  INTEGER, INTENT(IN)                  :: n, k, nIntegration
+  REAL(KIND=dp), INTENT(IN)            :: Nodalmu(:),Nodalrho(:)
+  REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz
+  REAL(KIND=dp), INTENT(IN)            :: ratio
+!------------------------------------------------------------------------------
+
+  TYPE(Nodes_t) :: Nodes, ParentNodes
+  TYPE(GaussIntegrationPoints_t) :: IntegStuff
+
+  REAL(KIND=dp) :: muder0, rho, mu
+  REAL(KIND=dp) :: Basis(n), dBasisdx(n,3)
+  REAL(KIND=dp) :: ParentBasis(k), ParentdBasisdx(k,3), ParentdBasisdn(k)
+  REAL(KIND=dp) :: Normal(3), ParentU, ParentV, ParentW
+  REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
+
+  INTEGER :: i, j, p, q, t, dim
+
+  REAL(kind=dp) :: e, g, h
+
+  REAL(KIND=dp) :: SqrtElementMetric, U, V, W, S
+  LOGICAL :: Stat
+
+  ! SAVE Nodes, ParentNodes
+  !------------------------------------------------------------------------------
+  dim = CoordinateSystemDimension()
+  FORCE = 0.0d0
+  STIFF = 0.0d0
+
+  CALL GetElementNodes( Nodes, Element )
+  CALL GetElementNodes( ParentNodes, ParentElement )
+  !------------------------------------------------------------------------------
+  !      Numerical integration
+  !------------------------------------------------------------------------------
+  IntegStuff = GaussPoints( Element, nIntegration )
+
+  DO t=1,IntegStuff % n
+    U = IntegStuff % u(t)
+    V = IntegStuff % v(t)
+    W = IntegStuff % w(t)
+    S = IntegStuff % s(t)
+
+    Normal = NormalVector( Element, Nodes, U, V, .TRUE. ) 
+
+    !------------------------------------------------------------------------------
+    !   Basis function values & derivatives at the integration point
+    !------------------------------------------------------------------------------
+    stat = ElementInfo( Element,Nodes,U,V,W,SqrtElementMetric, &
+              Basis,dBasisdx )
+    S = S * SqrtElementMetric
+
+    !------------------------------------------------------------------------------
+    !   Basis function & derivatives at the integration point from Parent Element
+    !------------------------------------------------------------------------------
+    ParentNodalU = 0.0d0
+    ParentNodalV = 0.0d0
+    ParentNodalW = 0.0d0
+    DO i = 1,n
+      DO j = 1,k
+         IF( Element % NodeIndexes(i) == ParentElement % NodeIndexes(j) ) THEN
+            ParentNodalU(i) = ParentElement % Type % NodeU(j)
+            ParentNodalV(i) = ParentElement % Type % NodeV(j)
+            ParentNodalW(i) = ParentElement % Type % NodeW(j)
+         END IF
+      END DO
+    END DO
+    ParentU = SUM( Basis(1:n) * ParentNodalU(1:n) )
+    ParentV = SUM( Basis(1:n) * ParentNodalV(1:n) )
+    ParentW = SUM( Basis(1:n) * ParentNodalW(1:n) )
+
+    stat = ElementInfo( ParentElement, ParentNodes, &
+        ParentU, ParentV, ParentW, SqrtElementMetric, &
+        ParentBasis, ParentdBasisdx )
+
+    !------------------------------------------------------------------------------
+    !   Visicosity at the integration point by the solutions from previous 
+    !   iteration on the Parent Element 
+    !------------------------------------------------------------------------------
+    rho  = SUM( Nodalrho(1:n)*Basis(1:n) )
+    mu = SUM( Nodalmu(1:n) * Basis(1:n) )
+    mu = EffectiveViscosity( mu, rho, Ux, Uy, Uz, ParentElement, ParentNodes, &
+                            k, k, ParentU, ParentV, ParentW,  muder0, LocalIP=t )
+
+    ! e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
+
+    ! DO p = 1,k
+    !   ParentdBasisdn(p) = SUM( Normal(1:3) * ParentdBasisdx(p,1:3) )
+    ! END DO
+    
+    !------------------------------------------------------------------------------
+    !        The boundary terms from integration by parts
+    !------------------------------------------------------------------------------
+    h = ElementDiameter( Element, Nodes )
+
+
+    DO p = 1,k
+      DO q = 1,k
+        STIFF(p,q) = STIFF(p,q) - ParentdBasisdn(p) * ParentBasis(q) * s
+        ! STIFF(p,q) = STIFF(p,q) - c1 * ParentBasis(p) * ParentdBasisdn(q) * s
+        ! STIFF(p,q) = STIFF(p,q) + c2 * ParentBasis(p) * ParentBasis(q) * s
+        ! STIFF(p,q) = STIFF(p,q) - c3 * ParentdBasisdn(p) * ParentdBasisdn(q) * s
+      END DO
+    END DO
+    !------------------------------------------------------------------------------
+    !        The Nitsche's terms
+    !------------------------------------------------------------------------------
+
+
+  !------------------------------------------------------------------------------
+  END DO
+!------------------------------------------------------------------------------
+ END SUBROUTINE StokesNitscheBoundary
 !------------------------------------------------------------------------------
 
 
