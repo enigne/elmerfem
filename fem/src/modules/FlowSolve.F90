@@ -1358,43 +1358,49 @@
             !=======================================================================
             !             Nitsche's method
             !=======================================================================
-            CurElement => Model % CurrentElement
+            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
+              ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
+              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) )THEN
+ 
+                CurElement => Model % CurrentElement
 
-            ! Get the parent element since derivatives of the basis functions are needed
-            ParentElement => Element % BoundaryInfo % Left
-            IF ( .NOT. ASSOCIATED( ParentElement ) ) &
-               ParentElement => Element % BoundaryInfo % Right
-            
-            n = GetElementNOFnodes( Element )
-            k = GetElementNOFnodes( ParentElement )
+                ! Get the parent element since derivatives of the basis functions are needed
+                ParentElement => Element % BoundaryInfo % Left
+                IF ( .NOT. ASSOCIATED( ParentElement ) ) &
+                   ParentElement => Element % BoundaryInfo % Right
+                
+                n = GetElementNOFnodes( Element )
+                k = GetElementNOFnodes( ParentElement )
 
-            EpsilonBoundary(1:n) = GetReal( BC, 'e', GotIt )
-            IF (.NOT. GotIt) EpsilonBoundary(1:n) = 0.0_dp
+                EpsilonBoundary(1:n) = GetReal( BC, 'e', GotIt )
+                IF (.NOT. GotIt) EpsilonBoundary(1:n) = 0.0_dp
 
-            SELECT CASE( NSDOFs )
-              CASE(3)
-                U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
-                V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
-                W(1:n) = 0.0_dp
-              CASE(4)
-                U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-3)
-                V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
-                W(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
-            END SELECT
+                SELECT CASE( NSDOFs )
+                  CASE(3)
+                    U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
+                    V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
+                    W(1:n) = 0.0_dp
+                  CASE(4)
+                    U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-3)
+                    V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
+                    W(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
+                END SELECT
 
-            Density(1:k)   = GetParentMatProp( 'Density' )
-            Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
+                Density(1:k)   = GetParentMatProp( 'Density' )
+                Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
 
-            CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
-              Element, ParentElement, n, k, nIntegration, EpsilonBoundary, &
-              Viscosity, Density, U, V, W, GLratio)
-            
-            ! CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement)
+                CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
+                  Element, ParentElement, n, k, nIntegration, EpsilonBoundary, &
+                  Viscosity, Density, U, V, W, GLratio)
+                
+                CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 
-            Model % CurrentElement => CurElement 
-            STIFF = 0.0d0
-            FORCE = 0.0d0
-            !=======================================================================
+                Model % CurrentElement => CurElement 
+                STIFF = 0.0d0
+                FORCE = 0.0d0
+                !=======================================================================
+              END IF
+            END IF
           END IF
 !===============================================================================
 

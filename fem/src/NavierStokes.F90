@@ -1976,7 +1976,7 @@ MODULE NavierStokes
 
 !------------------------------------------------------------------------------
 SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
-                                n, k, nIntegration, EpsilonBoundary, Nodalmu, &
+                                n, np, nIntegration, EpsilonBoundary, Nodalmu, &
                                 Nodalrho, Ux, Uy, Uz, ratio )
    
   USE ElementUtils
@@ -1985,7 +1985,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   REAL(KIND=dp), INTENT(INOUT)         :: STIFF(:,:), FORCE(:)
   REAL(KIND=dp), INTENT(IN)            :: LOAD(:,:), EpsilonBoundary(:)
   TYPE(Element_t), POINTER, INTENT(IN) :: Element, ParentElement
-  INTEGER, INTENT(IN)                  :: n, k, nIntegration
+  INTEGER, INTENT(IN)                  :: n, np, nIntegration
   REAL(KIND=dp), INTENT(IN)            :: Nodalmu(:),Nodalrho(:)
   REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz
   REAL(KIND=dp), INTENT(IN)            :: ratio
@@ -1996,11 +1996,12 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
 
   REAL(KIND=dp) :: muder0, rho, mu
   REAL(KIND=dp) :: Basis(n), dBasisdx(n,3)
-  REAL(KIND=dp) :: ParentBasis(k), ParentdBasisdx(k,3), ParentdBasisdn(k)
+  REAL(KIND=dp) :: ParentBasis(np), ParentdBasisdx(np,3), ParentdBasisdn(np)
   REAL(KIND=dp) :: Normal(3), ParentU, ParentV, ParentW
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
+  REAL(KIND=dp) :: sigma(np,4)
 
-  INTEGER :: i, j, p, q, t, dim
+  INTEGER :: i, j, p, q, t, dim, c
 
   REAL(kind=dp) :: e, g, h
 
@@ -2010,6 +2011,8 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   ! SAVE Nodes, ParentNodes
   !------------------------------------------------------------------------------
   dim = CoordinateSystemDimension()
+  c = dim + 1
+
   FORCE = 0.0d0
   STIFF = 0.0d0
 
@@ -2042,7 +2045,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     ParentNodalV = 0.0d0
     ParentNodalW = 0.0d0
     DO i = 1,n
-      DO j = 1,k
+      DO j = 1, np
          IF( Element % NodeIndexes(i) == ParentElement % NodeIndexes(j) ) THEN
             ParentNodalU(i) = ParentElement % Type % NodeU(j)
             ParentNodalV(i) = ParentElement % Type % NodeV(j)
@@ -2065,32 +2068,53 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     rho  = SUM( Nodalrho(1:n)*Basis(1:n) )
     mu = SUM( Nodalmu(1:n) * Basis(1:n) )
     mu = EffectiveViscosity( mu, rho, Ux, Uy, Uz, ParentElement, ParentNodes, &
-                            k, k, ParentU, ParentV, ParentW,  muder0, LocalIP=t )
+                            np, np, ParentU, ParentV, ParentW,  muder0, LocalIP=t )
 
-    ! e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
+    ! n*\nabla
+    DO q = 1, np
+      ParentdBasisdn(q) = SUM( Normal(1:3) * ParentdBasisdx(q,1:3) )
+    END DO
 
-    ! DO p = 1,k
-    !   ParentdBasisdn(p) = SUM( Normal(1:3) * ParentdBasisdx(p,1:3) )
-    ! END DO
-    
     !------------------------------------------------------------------------------
     !        The boundary terms from integration by parts
     !------------------------------------------------------------------------------
+    sigma = 0.0_dp
+
+    DO q = 1, np
+      DO i = 1, dim
+        sigma(q, i) =  2.0 * mu * Normal(i) * ParentdBasisdn(q)
+      END DO
+      sigma(q, c) = - ParentBasis(q)
+    END DO
+
+    e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
+
     h = ElementDiameter( Element, Nodes )
 
-
-    DO p = 1,k
-      DO q = 1,k
-        STIFF(p,q) = STIFF(p,q) - ParentdBasisdn(p) * ParentBasis(q) * s
-        ! STIFF(p,q) = STIFF(p,q) - c1 * ParentBasis(p) * ParentdBasisdn(q) * s
-        ! STIFF(p,q) = STIFF(p,q) + c2 * ParentBasis(p) * ParentBasis(q) * s
-        ! STIFF(p,q) = STIFF(p,q) - c3 * ParentdBasisdn(p) * ParentdBasisdn(q) * s
-      END DO
-    END DO
     !------------------------------------------------------------------------------
     !        The Nitsche's terms
     !------------------------------------------------------------------------------
+    DO p = 1, np
+      DO q = 1, np
 
+        DO i = 1, dim
+          ! (n sigma n)*(n v)
+          DO j = 1, c
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) & 
+                                         - sigma(q, j) * Normal(i) * ParentBasis(p) * s
+
+            STIFF((p-1)*c+j,(q-1)*c+i) = STIFF((p-1)*c+j,(q-1)*c+i) & 
+                                         - sigma(p, j) * Normal(i) * ParentBasis(q) * s
+          END DO            
+          ! (u n)*(v n)
+          DO j = 1, dim
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) &
+                                        + e / h * Normal(i) * ParentBasis(q) &
+                                                * Normal(j) * ParentBasis(p) * s
+          END DO
+        END DO
+      END DO
+    END DO
 
   !------------------------------------------------------------------------------
   END DO
