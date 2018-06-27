@@ -2106,7 +2106,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
             STIFF((p-1)*c+j,(q-1)*c+i) = STIFF((p-1)*c+j,(q-1)*c+i) & 
                                          - sigma(p, j) * Normal(i) * ParentBasis(q) * s
           END DO            
-          ! (u n)*(v n)
+          ! (u n)*(v n) duplicate as in NS bounfary function, e/h = SlipCoeff
           DO j = 1, dim
             STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) &
                                         + e / h * Normal(i) * ParentBasis(q) &

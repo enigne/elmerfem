@@ -1195,86 +1195,20 @@
                    'Normal-Tangential '//GetVarName(Solver % Variable), GotIt )
           END IF
 
-
-!-----------------------------------------------------------------------------
-!         Weakly Imposed Dirichlet B.C.
-!-----------------------------------------------------------------------------
-          weaklyDirichlet = GetLogical( BC, 'Weakly Imposed Dirichlet', GotIt)
-
-          IF ( weaklyDirichlet ) THEN
-            ! By default use slipCoeff(1,:)
-            weaklySlip(1:n) =  SlipCoeff(1,1:n)
-            ! user input coefficients
-            weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
-            IF ( .NOT. GotIt ) weaklyMu = 1.0e6 ! /hk ???
-
-            ! Check for the node with masks
-            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
-                 ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
-              ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND.  & 
-                   ALL(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) <= 0.0_dp) ) THEN
-                DO jj = 1, n
-                  weaklySlip(jj) = weaklyMu
-                END DO 
-              END IF
-
-              ! GL element with grounded and floating nodes
-              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
-                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
-                DO jj = 1, n
-                  ! GL nodes with positive net pressure, can move upwards
-                  ! IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp) ) THEN
-                    weaklySlip(jj) = SlipCoeff(1,jj) 
-                  ! END IF
-                END DO 
-              END IF
-            END IF
-
-            ! restore slip coefficients
-            SlipCoeff(1,1:n) = weaklySlip(1:n)
-
-            ! smoothing function for grounded nodes only
-            !=======================================================================
-            ! Need to be rewritten
-            ! Smoothing 
-            smoothDirichlet = GetLogical( BC, 'Weakly Dirichlet Smoothing', GotIt)
-            IF (smoothDirichlet) THEN
-
-              smoothingType = GetInteger(BC, 'Weakly Dirichlet Smoothing Type', GotIt)
-              IF (.NOT. Gotit) smoothingType = 1
-
-              smoothingRange = GetConstReal(BC, 'Weakly Dirichlet Smoothing Range', GotIt)
-              IF (.NOT. Gotit) smoothingRange = 2.0_dp
-
-              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
-                GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
-                SmoothL = smoothingRange * ABS(ElementNodes % x(n) - ElementNodes % x(1))
-
-                DO jj = 1, n
-                  tempNodeIndex = Element % NodeIndexes(jj)  
-                  GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
-                  IF (GLparaIndex == 0) CYCLE
-
-                  IF ( GroundedMask(GroundedMaskPerm(tempNodeIndex)) > -0.5_dp ) THEN 
-                    CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, smoothingType, &
-                          weaklyMu, 9.8e-3_dp , SmoothFactor)
-                    SlipCoeff(1, jj) = SmoothFactor
-                  END IF
-                END DO
-              END IF
-            END IF
-          !=======================================================================
-          END IF
-          
-
-!===============================================================================
-!         GL parameterization
-!===============================================================================
+!------------------------------------------------------------------------------
+!         Groundingline parameterization
+!         Including: 
+!           -> Parameterize GL elment, 
+!           -> High-Order integration, 
+!           -> Weakly Imposed Dirichlet Boundary(Nitsche's method)
+!           
+!------------------------------------------------------------------------------
           GLratio = 1.0_dp
 
           IF ( GLParaFlag ) THEN
-            ! High-Order integration, by default 10th order
+            !=======================================================================
+            !          High-Order integration, by default 10th order
+            !=======================================================================
             HighOrderGLInt = GetLogical( BC, 'High Order Integration', GotIt)
             IF ( HighOrderGLInt ) THEN
               nIntegration = GetInteger( BC, 'Order of Slip Coefficient', GotIt)
@@ -1283,7 +1217,10 @@
               nIntegration = 10
             END IF
 
-            ! Parameterize pressure, use water pressure at bedrock for the grounded area in the GL element
+            !=======================================================================
+            !     Parameterize pressure, use water pressure at bedrock 
+            !     for the grounded area in the GL element
+            !=======================================================================
             PressureParamFlag = GetLogical( BC, 'Parameterize Pressure', GotIt)
             IF ( .NOT. GotIt ) PressureParamFlag = .TRUE.
 
@@ -1301,7 +1238,10 @@
               betaReduced(n) = GetConstReal(BC, 'Reduce Beta Factor Floating', GotIt)
               IF ( .NOT. GotIt ) betaReduced(n) = 0.5
             END IF
-            ! Determine GL element by looking for the element with opposite signs in the net pressure
+            !=======================================================================
+            ! Determine GL element by looking for the element with opposite signs 
+            ! in the net pressure
+            !=======================================================================
             IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) .AND. &
                  ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)) THEN
             ! Find GL element
@@ -1309,7 +1249,7 @@
                    ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) .AND. &
                    ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5) ) THEN
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                ! currently only for 2D, 3D need to be implemented on the edges 
+                ! currently only for 2D, TODO: 3D need to be implemented on the edges 
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 ! Initialize temprary variables 
                 FFstressSum = 0.0_dp
@@ -1346,15 +1286,88 @@
             DO jj = 1, n
               NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
             END DO
-            ! Get corresponding bedrock slop at the current element
-            !!!!!!!! Automatic computation need to be added !!!!!!!!
+            !=======================================================================
+            !          Get corresponding bedrock slop at the current element
+            !         !!!!!!! TODO: Automatic computation need to be added !!!!!!!!
+            !=======================================================================
             bSlope(1:n) = GetReal( BC, 'Bedrock Slope', GotIt )
             IF (.NOT. Gotit) bSlope(1:n) = 0.0_dp
 
             bSlopEle = 1.0/ n * SUM(bSlope(1:n))
-            outputFlag = .FALSE.
-            IF ( iter == 1) outputFlag = .TRUE.
+            !=======================================================================
+            !         Weakly Imposed Dirichlet B.C.
+            !=======================================================================
+            weaklyDirichlet = GetLogical( BC, 'Weakly Imposed Dirichlet', GotIt)
+            weaklySlip(1:n) = 0.0_dp
 
+            IF ( weaklyDirichlet ) THEN
+              ! user input coefficients
+              weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
+              IF ( .NOT. GotIt ) weaklyMu = 10.0 ! /hk !!! TODO !!!
+
+              ! Check for the node with masks
+              IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
+                   ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
+                ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
+                IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND.  & 
+                     ALL(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) <= 0.0_dp) ) THEN
+                  DO jj = 1, n
+                    weaklySlip(jj) = weaklyMu
+                    ExtPressure(jj) = 0.0d0
+                  END DO 
+                END IF
+
+                ! GL element with grounded and floating nodes
+                IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
+                     ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
+                  DO jj = 1, n
+                    ! GL nodes with positive net pressure, can move upwards
+                    IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) <= 0.0_dp) ) THEN
+                      weaklySlip(jj) = weaklyMu
+                      ! ExtPressure(jj) = 0.0d0
+                    END IF
+                  END DO 
+                END IF
+
+
+              END IF
+
+              ! restore slip coefficients
+              ! SlipCoeff(1,1:n) = weaklySlip(1:n)
+
+              ! smoothing function for grounded nodes only
+              !=======================================================================
+              ! Need to be rewritten
+              ! Smoothing 
+              ! smoothDirichlet = GetLogical( BC, 'Weakly Dirichlet Smoothing', GotIt)
+              ! IF (smoothDirichlet) THEN
+
+              !   smoothingType = GetInteger(BC, 'Weakly Dirichlet Smoothing Type', GotIt)
+              !   IF (.NOT. Gotit) smoothingType = 1
+
+              !   smoothingRange = GetConstReal(BC, 'Weakly Dirichlet Smoothing Range', GotIt)
+              !   IF (.NOT. Gotit) smoothingRange = 2.0_dp
+
+              !   IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
+              !     GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
+              !     SmoothL = smoothingRange * ABS(ElementNodes % x(n) - ElementNodes % x(1))
+
+              !     DO jj = 1, n
+              !       tempNodeIndex = Element % NodeIndexes(jj)  
+              !       GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
+              !       IF (GLparaIndex == 0) CYCLE
+
+              !       IF ( GroundedMask(GroundedMaskPerm(tempNodeIndex)) > -0.5_dp ) THEN 
+              !         CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, smoothingType, &
+              !               weaklyMu, 9.8e-3_dp , SmoothFactor)
+              !         SlipCoeff(1, jj) = SmoothFactor
+              !       END IF
+              !     END DO
+              !   END IF
+              ! END IF
+            !=======================================================================
+            END IF
+          
             !=======================================================================
             !             Nitsche's method
             !=======================================================================
@@ -1372,9 +1385,6 @@
                 n = GetElementNOFnodes( Element )
                 k = GetElementNOFnodes( ParentElement )
 
-                EpsilonBoundary(1:n) = GetReal( BC, 'e', GotIt )
-                IF (.NOT. GotIt) EpsilonBoundary(1:n) = 0.0_dp
-
                 SELECT CASE( NSDOFs )
                   CASE(3)
                     U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
@@ -1390,7 +1400,7 @@
                 Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
 
                 CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
-                  Element, ParentElement, n, k, nIntegration, EpsilonBoundary, &
+                  Element, ParentElement, n, k, nIntegration, weaklySlip, &
                   Viscosity, Density, U, V, W, GLratio)
                 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
@@ -1398,9 +1408,13 @@
                 Model % CurrentElement => CurElement 
                 STIFF = 0.0d0
                 FORCE = 0.0d0
-                !=======================================================================
               END IF
             END IF
+            !=======================================================================
+            !             Output Setup
+            !=======================================================================
+            outputFlag = .FALSE.
+            IF ( iter == 1) outputFlag = .TRUE.
           END IF
 !===============================================================================
 
