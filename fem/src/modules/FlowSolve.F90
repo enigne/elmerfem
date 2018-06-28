@@ -1229,6 +1229,7 @@
             IF ( .NOT. GotIt ) NormalParamFlag = .TRUE.
 
             ! reduce beta in the intergal in GL element, test only!!!!
+            ! TODO: 3D implementation
             betaReduced(1:n) = GetReal(BC, 'Reduce Beta Factor', GotIt)
             IF ( .NOT. GotIt ) THEN
               ! index 1: grounded
@@ -1244,7 +1245,7 @@
             !=======================================================================
             IF ( ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) .AND. &
                  ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)) THEN
-            ! Find GL element
+              ! Find GL element
               IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) >= 0.0_dp)  .AND. &
                    ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) .AND. &
                    ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5) ) THEN
@@ -1281,8 +1282,9 @@
 
               END IF
             END IF
-
-            ! Net Pressure 
+            !=======================================================================
+            !     Net Pressure for GL parameterization (linear interpolation)
+            !=======================================================================
             DO jj = 1, n
               NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
             END DO
@@ -1326,46 +1328,10 @@
                       weaklySlip(jj) = weaklyMu
                       ! ExtPressure(jj) = 0.0d0
                     END IF
+                    ! TODO: GL nodes with positive net pressure, can move upwards
                   END DO 
                 END IF
-
-
               END IF
-
-              ! restore slip coefficients
-              ! SlipCoeff(1,1:n) = weaklySlip(1:n)
-
-              ! smoothing function for grounded nodes only
-              !=======================================================================
-              ! Need to be rewritten
-              ! Smoothing 
-              ! smoothDirichlet = GetLogical( BC, 'Weakly Dirichlet Smoothing', GotIt)
-              ! IF (smoothDirichlet) THEN
-
-              !   smoothingType = GetInteger(BC, 'Weakly Dirichlet Smoothing Type', GotIt)
-              !   IF (.NOT. Gotit) smoothingType = 1
-
-              !   smoothingRange = GetConstReal(BC, 'Weakly Dirichlet Smoothing Range', GotIt)
-              !   IF (.NOT. Gotit) smoothingRange = 2.0_dp
-
-              !   IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) THEN
-              !     GLposition = ListGetConstReal(  Model % Constants, 'GroundingLine Position', GotIt)
-              !     SmoothL = smoothingRange * ABS(ElementNodes % x(n) - ElementNodes % x(1))
-
-              !     DO jj = 1, n
-              !       tempNodeIndex = Element % NodeIndexes(jj)  
-              !       GLparaIndex = GroundingLineParaPerm(tempNodeIndex)
-              !       IF (GLparaIndex == 0) CYCLE
-
-              !       IF ( GroundedMask(GroundedMaskPerm(tempNodeIndex)) > -0.5_dp ) THEN 
-              !         CALL SmoothingAroundGL( GLposition, ElementNodes % x(jj), SmoothL, smoothingType, &
-              !               weaklyMu, 9.8e-3_dp , SmoothFactor)
-              !         SlipCoeff(1, jj) = SmoothFactor
-              !       END IF
-              !     END DO
-              !   END IF
-              ! END IF
-            !=======================================================================
             END IF
           
             !=======================================================================
@@ -1373,7 +1339,9 @@
             !=======================================================================
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
               ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) )THEN
+              IF ( (ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp)) .OR. &
+                   ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND. & 
+                     ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) )THEN
  
                 CurElement => Model % CurrentElement
 
@@ -1401,7 +1369,7 @@
 
                 CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
                   Element, ParentElement, n, k, nIntegration, weaklySlip, &
-                  Viscosity, Density, U, V, W, GLratio)
+                  Viscosity, Density, U, V, W, NetPressure, GLratio)
                 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 

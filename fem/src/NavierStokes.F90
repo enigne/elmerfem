@@ -1977,7 +1977,7 @@ MODULE NavierStokes
 !------------------------------------------------------------------------------
 SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
                                 n, np, nIntegration, EpsilonBoundary, Nodalmu, &
-                                Nodalrho, Ux, Uy, Uz, ratio )
+                                Nodalrho, Ux, Uy, Uz, NodalNetPressure, GLratio )
    
   USE ElementUtils
 
@@ -1988,7 +1988,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   INTEGER, INTENT(IN)                  :: n, np, nIntegration
   REAL(KIND=dp), INTENT(IN)            :: Nodalmu(:),Nodalrho(:)
   REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz
-  REAL(KIND=dp), INTENT(IN)            :: ratio
+  REAL(KIND=dp), INTENT(IN)            :: NodalNetPressure(:), GLratio
 !------------------------------------------------------------------------------
 
   TYPE(Nodes_t) :: Nodes, ParentNodes
@@ -2003,7 +2003,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
 
   INTEGER :: i, j, p, q, t, dim, c
 
-  REAL(kind=dp) :: e, g, h
+  REAL(kind=dp) :: e, g, h, heaviSide, pressure_Integ
 
   REAL(KIND=dp) :: SqrtElementMetric, U, V, W, S
   LOGICAL :: Stat
@@ -2038,6 +2038,19 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
               Basis,dBasisdx )
     S = S * SqrtElementMetric
 
+    !------------------------------------------------------------------------------
+    !    Compute heaviside function according the the net pressure
+    !------------------------------------------------------------------------------
+    ! Net pressure at the current gauss points
+     pressure_Integ = sum(NodalNetPressure(1:n) * Basis(1:n))
+
+     ! Determine heaviSide function value
+     IF (pressure_Integ > 0.0_dp ) THEN ! Floating
+        heaviSide = 0.0d0
+     ELSE  
+        ! Grounded
+        heaviSide = 1.0d0 
+     END IF
     !------------------------------------------------------------------------------
     !   Basis function & derivatives at the integration point from Parent Element
     !------------------------------------------------------------------------------
