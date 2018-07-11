@@ -1977,7 +1977,9 @@ MODULE NavierStokes
 !------------------------------------------------------------------------------
 SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
                                 n, np, nIntegration, EpsilonBoundary, Nodalmu, &
-                                Nodalrho, Ux, Uy, Uz, NodalNetPressure, GLratio )
+                                Nodalrho, Ux, Uy, Uz, NodalExtPressure, &
+                                NormalTangential, NodalNetPressure, BoundaryMask, &
+                                GLratio )
    
   USE ElementUtils
 
@@ -1988,7 +1990,10 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   INTEGER, INTENT(IN)                  :: n, np, nIntegration
   REAL(KIND=dp), INTENT(IN)            :: Nodalmu(:),Nodalrho(:)
   REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz
-  REAL(KIND=dp), INTENT(IN)            :: NodalNetPressure(:), GLratio
+  REAL(KIND=dp), INTENT(IN)            :: NodalExtPressure(:), NodalNetPressure(:)
+  REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio
+  LOGICAL, INTENT(IN)                  :: NormalTangential
+
 !------------------------------------------------------------------------------
 
   TYPE(Nodes_t) :: Nodes, ParentNodes
@@ -2000,8 +2005,9 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   REAL(KIND=dp) :: Normal(3), ParentU, ParentV, ParentW
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
+  REAL(KIND=dp) :: hydroLoad(3), Alpha, Vect(3),Tangent(3),Tangent2(3)
 
-  INTEGER :: i, j, p, q, t, dim, c
+  INTEGER :: i, j, p, q, t, dim, c, k, l
 
   REAL(kind=dp) :: e, g, h, heaviSide, pressure_Integ
 
@@ -2038,18 +2044,28 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
               Basis,dBasisdx )
     S = S * SqrtElementMetric
 
+     SELECT CASE( Element % TYPE % DIMENSION )
+     CASE(1)
+        Tangent(1) =  Normal(2)
+        Tangent(2) = -Normal(1)
+        Tangent(3) =  0.0_dp
+        Tangent2   =  0.0_dp
+     CASE(2)
+        CALL TangentDirections( Normal, Tangent, Tangent2 ) 
+     END SELECT
+
     !------------------------------------------------------------------------------
     !    Compute heaviside function according the the net pressure
     !------------------------------------------------------------------------------
     ! Net pressure at the current gauss points
-     pressure_Integ = sum(NodalNetPressure(1:n) * Basis(1:n))
+     pressure_Integ = sum(BoundaryMask(1:n) * Basis(1:n))
 
      ! Determine heaviSide function value
-     IF (pressure_Integ > 0.0_dp ) THEN ! Floating
-        heaviSide = 0.0d0
+     IF ( pressure_Integ >= 1.0 ) THEN ! Grounded
+        heaviSide = 1.0d0
      ELSE  
-        ! Grounded
-        heaviSide = 1.0d0 
+        ! Floating
+        heaviSide = 0.0d0 
      END IF
     !------------------------------------------------------------------------------
     !   Basis function & derivatives at the integration point from Parent Element
@@ -2114,20 +2130,58 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
           ! (n sigma n)*(n v)
           DO j = 1, c
             STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) & 
-                                         - sigma(q, j) * Normal(i) * ParentBasis(p) * s
+                                         - sigma(q, j) * Normal(i) * ParentBasis(p) * s * heaviSide
 
             STIFF((p-1)*c+j,(q-1)*c+i) = STIFF((p-1)*c+j,(q-1)*c+i) & 
-                                         - sigma(p, j) * Normal(i) * ParentBasis(q) * s
+                                         - sigma(p, j) * Normal(i) * ParentBasis(q) * s * heaviSide
           END DO            
           ! (u n)*(v n) duplicate as in NS bounfary function, e/h = SlipCoeff
           DO j = 1, dim
             STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) &
                                         + e / h * Normal(i) * ParentBasis(q) &
-                                                * Normal(j) * ParentBasis(p) * s
+                                                * Normal(j) * ParentBasis(p) * s * heaviSide
           END DO
         END DO
       END DO
     END DO
+
+    !------------------------------------------------------------------------------
+    !        The Forcing terms
+    !------------------------------------------------------------------------------
+    Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) * (1.0 - heaviSide)
+    hydroLoad(1:n) = 0.0_dp
+
+     IF ( NormalTangential ) THEN
+       hydroLoad(1) = hydroLoad(1) + Alpha
+     ELSE
+        DO i=1,dim
+           hydroLoad(i) = hydroLoad(i) + Alpha * Normal(i)
+        END DO
+     END IF
+
+     DO q=1,np
+       DO i=1,dim
+         k = (q-1)*c + i
+         IF ( NormalTangential ) THEN
+            SELECT CASE(i)
+               CASE(1)
+                 Vect = Normal
+               CASE(2)
+                 Vect = Tangent
+               CASE(3)
+                 Vect = Tangent2
+            END SELECT
+
+            DO j=1,dim
+               l = (q-1)*c + j
+               Force(l) = Force(l) + &
+                 s * ParentBasis(q) * hydroLoad(i) * Vect(j)
+            END DO
+         ELSE
+            Force(k) = Force(k) + s * ParentBasis(q) * hydroLoad(i)
+         END IF
+       END DO
+     END DO
 
   !------------------------------------------------------------------------------
   END DO

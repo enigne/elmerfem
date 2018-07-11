@@ -146,7 +146,7 @@
                NormalParamFlag = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
     REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:), &
-                     betaReduced(:), EpsilonBoundary(:)
+                     betaReduced(:), EpsilonBoundary(:), BoundaryMask(:)
 !=========================================================================
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
@@ -167,7 +167,7 @@
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
        ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope, betaReduced, &
-       EpsilonBoundary
+       EpsilonBoundary, BoundaryMask
 
 #ifdef USE_ISO_C_BINDINGS
       REAL(KIND=dp) :: at,at0,at1,totat,st,totst
@@ -330,7 +330,7 @@
                LoadVector, Alpha, Beta, &
                ExtPressure, bedPressure, weaklySlip, &
                NetPressure, bSlope, betaReduced, EpsilonBoundary, &
-               STAT=istat )
+               BoundaryMask, STAT=istat )
 
        END IF
 
@@ -359,7 +359,8 @@
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
                  ExtPressure( N ), bedPressure( N ),     &
                  weaklySlip( N ), NetPressure( N ), bSlope( N ), &
-                 betaReduced( N ), EpsilonBoundary( N ), STAT=istat )
+                 betaReduced( N ), EpsilonBoundary( N ), &
+                 BoundaryMask( N ), STAT=istat )
 
        Drag = 0.0d0
        NULLIFY(Pwrk) 
@@ -1306,45 +1307,43 @@
               ! user input coefficients
               weaklyMu =  GetConstReal( BC, 'Weakly Imposed Dirichlet Coefficient', GotIt)
               IF ( .NOT. GotIt ) weaklyMu = 10.0 ! /hk !!! TODO !!!
+              weaklySlip(1:n) = weaklyMu
+            END IF
 
-              ! Check for the node with masks
-              IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
-                   ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
-                ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
-                IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND.  & 
-                     ALL(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) <= 0.0_dp) ) THEN
-                  DO jj = 1, n
-                    weaklySlip(jj) = weaklyMu
-                    ExtPressure(jj) = 0.0d0
-                  END DO 
+            !=======================================================================
+            !   Determine the boundary type according to GroundedMask(Geometrically)
+            !   and GroundingLinePara(Physically)
+            !=======================================================================
+            BoundaryMask(1:n) = 0.0_dp
+
+            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
+              DO jj = 1, n
+                ! Grounded (Geometrically)
+                IF ( GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= -0.5_dp ) THEN
+                  BoundaryMask(jj) = 1.0_dp
+                ! Not grounded (Geometrically)
+                ELSE IF  (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) < -0.5_dp) THEN
+                  BoundaryMask(jj) = -1.0_dp
                 END IF
 
-                ! GL element with grounded and floating nodes
-                IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
-                     ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
-                  DO jj = 1, n
-                    ! GL nodes with positive net pressure, can move upwards
-                    IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) <= 0.0_dp) ) THEN
-                      weaklySlip(jj) = weaklyMu
-                      ! ExtPressure(jj) = 0.0d0
-                    END IF
-                    ! TODO: GL nodes with positive net pressure, can move upwards
-                  END DO 
+                ! Check GLpara
+                IF ( GroundingLineParaPerm(Element % NodeIndexes(jj)) > 0 ) THEN
+                  ! net pressure up
+                  IF ( GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp ) THEN
+                    BoundaryMask(jj) = -1.0_dp
+                  END IF
                 END IF
-              END IF
+              END DO
+
+              ! Set not external pressure for fully grounded element (Necessary!!)
+              IF ( ALL(BoundaryMask(1:n) > 0.0)  )  ExtPressure(1:n) = 0.0
             END IF
           
             !=======================================================================
             !             Nitsche's method
             !=======================================================================
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
-              ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
-              IF ( (ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp)) .OR. &
-                   ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND. & 
-                     ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp) ) )THEN
- 
                 CurElement => Model % CurrentElement
-
                 ! Get the parent element since derivatives of the basis functions are needed
                 ParentElement => Element % BoundaryInfo % Left
                 IF ( .NOT. ASSOCIATED( ParentElement ) ) &
@@ -1369,14 +1368,16 @@
 
                 CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
                   Element, ParentElement, n, k, nIntegration, weaklySlip, &
-                  Viscosity, Density, U, V, W, NetPressure, GLratio)
+                  Viscosity, Density, U, V, W, ExtPressure, NormalTangential, &
+                  NetPressure, BoundaryMask, GLratio)
                 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 
                 Model % CurrentElement => CurElement 
                 STIFF = 0.0d0
                 FORCE = 0.0d0
-              END IF
+
+                ExtPressure(1:n) = 0.0
             END IF
             !=======================================================================
             !             Output Setup
