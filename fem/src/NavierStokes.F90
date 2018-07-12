@@ -2061,7 +2061,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
      pressure_Integ = sum(BoundaryMask(1:n) * Basis(1:n))
 
      ! Determine heaviSide function value
-     IF ( pressure_Integ >= 1.0 ) THEN ! Grounded
+     IF ( pressure_Integ >= 0.5  ) THEN ! Grounded
         heaviSide = 1.0d0
      ELSE  
         ! Floating

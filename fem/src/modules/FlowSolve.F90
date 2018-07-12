@@ -1336,7 +1336,10 @@
               END DO
 
               ! Set not external pressure for fully grounded element (Necessary!!)
-              IF ( ALL(BoundaryMask(1:n) > 0.0)  )  ExtPressure(1:n) = 0.0
+              IF ( ALL(BoundaryMask(1:n) > 0.0)  ) ExtPressure(1:n) = 0.0
+
+              IF ( ANY(BoundaryMask(1:n) < 0.0)  ) weaklySlip(1:n) = 0.0
+
             END IF
           
             !=======================================================================
