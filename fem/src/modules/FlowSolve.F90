@@ -1318,34 +1318,30 @@
 
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
               DO jj = 1, n
-                  BoundaryMask(jj) = GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj)))
-              END DO
-            END IF
-          
-            ! Check for the node with masks
-            IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0)  .AND. &
-                 ALL(GroundingLineParaPerm(Element % NodeIndexes) > 0) ) THEN
-              ! Elements with all nodes grounded including groundingline node (GroundedMask = 0)
-              IF ( ALL(GroundedMask(GroundedMaskPerm(Element % NodeIndexes)) > -0.5_dp) .AND.  & 
-                   ALL(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) <= 0.0_dp) ) THEN
-                DO jj = 1, n
-                  weaklySlip(jj) = weaklyMu
-                  ExtPressure(jj) = 0.0d0
-                END DO 
-              END IF
-
-              ! GL element with grounded and floating nodes
-              IF ( ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) > 0.0_dp)  .AND. &
-                   ANY(GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes)) < 0.0_dp)) THEN
-                DO jj = 1, n
-                  ! GL nodes with positive net pressure, can move upwards
-                  IF ( (GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) <= 0.0_dp) ) THEN
-                    weaklySlip(jj) = weaklyMu
-                    ! ExtPressure(jj) = 0.0d0
+                ! Grounded (Geometrically)
+                IF ( GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= -0.5_dp ) THEN
+                  BoundaryMask(jj) = 1.0_dp
+                  ! Check GLpara
+                  IF ( GroundingLineParaPerm(Element % NodeIndexes(jj)) > 0 ) THEN
+                    ! net pressure up
+                    IF ( GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp ) THEN
+                      BoundaryMask(jj) = 0.0_dp
+                    END IF
                   END IF
-                  ! TODO: GL nodes with positive net pressure, can move upwards
-                END DO 
-              END IF
+                ! Not grounded (Geometrically)
+                ELSE IF  (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) < -0.5_dp) THEN
+                  BoundaryMask(jj) = -1.0_dp
+                END IF
+              END DO
+
+              ! Element with floating nodes
+              IF ( ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) < 0.0) ) BoundaryMask(1:n) = -1.0_dp
+
+              ! Set not external pressure for fully grounded element (Necessary!!)
+              IF ( ALL(BoundaryMask(1:n) > 0.0) ) ExtPressure(1:n) = 0.0
+
+              IF ( ANY(BoundaryMask(1:n) < 0.0) ) weaklySlip(1:n) = 0.0
+
             END IF
 
             !=======================================================================
