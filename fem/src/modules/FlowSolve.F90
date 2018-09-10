@@ -1344,9 +1344,9 @@
 
             END IF
 
-            !=======================================================================
-            !             Nitsche's method
-            !=======================================================================
+            !===========================================================================================
+            !        Nitsche's method: add un=0 for grounded and -sigma_nn=pw for floating 
+            !===========================================================================================
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
                 CurElement => Model % CurrentElement
                 ! Get the parent element since derivatives of the basis functions are needed
@@ -1382,6 +1382,7 @@
                 STIFF = 0.0d0
                 FORCE = 0.0d0
 
+                ! Remove water pressure from N-S assembly
                 ExtPressure(1:n) = 0.0
             END IF
             !=======================================================================

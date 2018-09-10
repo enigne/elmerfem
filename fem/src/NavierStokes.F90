@@ -2006,6 +2006,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
   REAL(KIND=dp) :: hydroLoad(3), Alpha, Vect(3),Tangent(3),Tangent2(3)
+  REAL(KIND=dp) :: Pnu, Pnv, theta, gamma
 
   INTEGER :: i, j, p, q, t, dim, c, k, l
 
@@ -2146,16 +2147,16 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     END DO
 
     !------------------------------------------------------------------------------
-    !        The Forcing terms
+    !        The Forcing terms: water pressure for the floating ice
     !------------------------------------------------------------------------------
-    Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) * (1.0 - heaviSide)
+    Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) 
     hydroLoad(1:n) = 0.0_dp
 
      IF ( NormalTangential ) THEN
-       hydroLoad(1) = hydroLoad(1) + Alpha
+       hydroLoad(1) = hydroLoad(1) + Alpha * (1.0 - heaviSide)
      ELSE
         DO i=1,dim
-           hydroLoad(i) = hydroLoad(i) + Alpha * Normal(i)
+           hydroLoad(i) = hydroLoad(i) + Alpha * Normal(i) * (1.0 - heaviSide)
         END DO
      END IF
 
@@ -2183,6 +2184,32 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
        END DO
      END DO
 
+    !------------------------------------------------------------------------------
+    !        The Nitsche's method for Contact: only for the GL element 
+    !------------------------------------------------------------------------------
+    ! gamma = 1.0e6 / h
+    ! theta = 1.0
+    ! DO p = 1, np
+    !   DO q = 1, np
+
+    !     DO i = 1, dim
+    !       ! (n sigma n)*(n v)
+    !       DO j = 1, c
+    !         STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
+    !                                      * (sigma(p, j)+ Alpha ) * (sigma(q, j) + Alpha)  * heaviSide 
+
+    !                                      ! 1.0 / gamma * 
+    !         Pnu = (sigma(p, j) + Alpha) + gamma * Normal(i) * ParentBasis(q)
+    !         Pnv = theta * (sigma(q, j) + Alpha) + gamma * Normal(j) * ParentBasis(p)
+
+    !         STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s * R_negative(Pnu) * Pnv * heaviSide
+    !       END DO            
+
+
+    !     END DO
+    !   END DO
+    ! END DO    
+
   !------------------------------------------------------------------------------
   END DO
 !------------------------------------------------------------------------------
@@ -2206,7 +2233,12 @@ FUNCTION tan2Normal2D ( tanAlpha ) RESULT( normalV )
 
 END FUNCTION
 
+FUNCTION R_negative(x) RESULT (R_x)
+  REAL(KIND=dp) :: x, R_x
 
+  R_x = 0.5 * (x - ABS(x))
+
+END FUNCTION
 
 
 END MODULE NavierStokes
