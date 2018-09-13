@@ -2124,27 +2124,27 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     !------------------------------------------------------------------------------
     !        The Nitsche's terms
     !------------------------------------------------------------------------------
-    DO p = 1, np
-      DO q = 1, np
+    ! DO p = 1, np
+    !   DO q = 1, np
 
-        DO i = 1, dim
-          ! (n sigma n)*(n v)
-          DO j = 1, c
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) & 
-                                         - sigma(q, j) * Normal(i) * ParentBasis(p) * s * heaviSide
+    !     DO i = 1, dim
+    !       ! (n sigma n)*(n v)
+    !       DO j = 1, c
+    !         STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) & 
+    !                                      - sigma(q, j) * Normal(i) * ParentBasis(p) * s * heaviSide
 
-            STIFF((p-1)*c+j,(q-1)*c+i) = STIFF((p-1)*c+j,(q-1)*c+i) & 
-                                         - sigma(p, j) * Normal(i) * ParentBasis(q) * s * heaviSide
-          END DO            
-          ! (u n)*(v n) duplicate as in NS bounfary function, e/h = SlipCoeff
-          DO j = 1, dim
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) &
-                                        + e / h * Normal(i) * ParentBasis(q) &
-                                                * Normal(j) * ParentBasis(p) * s * heaviSide
-          END DO
-        END DO
-      END DO
-    END DO
+    !         STIFF((p-1)*c+j,(q-1)*c+i) = STIFF((p-1)*c+j,(q-1)*c+i) & 
+    !                                      - sigma(p, j) * Normal(i) * ParentBasis(q) * s * heaviSide
+    !       END DO            
+    !       ! (u n)*(v n) duplicate as in NS bounfary function, e/h = SlipCoeff
+    !       DO j = 1, dim
+    !         STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) &
+    !                                     + e / h * Normal(i) * ParentBasis(q) &
+    !                                             * Normal(j) * ParentBasis(p) * s * heaviSide
+    !       END DO
+    !     END DO
+    !   END DO
+    ! END DO
 
     !------------------------------------------------------------------------------
     !        The Forcing terms: water pressure for the floating ice
@@ -2187,28 +2187,31 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     !------------------------------------------------------------------------------
     !        The Nitsche's method for Contact: only for the GL element 
     !------------------------------------------------------------------------------
-    ! gamma = 1.0e6 / h
-    ! theta = 1.0
-    ! DO p = 1, np
-    !   DO q = 1, np
+    IF ( heaviSide > 0.0 ) THEN 
 
-    !     DO i = 1, dim
-    !       ! (n sigma n)*(n v)
-    !       DO j = 1, c
-    !         STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
-    !                                      * (sigma(p, j)+ Alpha ) * (sigma(q, j) + Alpha)  * heaviSide 
+      gamma = e / h
+      theta = 1.0
+      DO p = 1, np
+        DO q = 1, np
 
-    !                                      ! 1.0 / gamma * 
-    !         Pnu = (sigma(p, j) + Alpha) + gamma * Normal(i) * ParentBasis(q)
-    !         Pnv = theta * (sigma(q, j) + Alpha) + gamma * Normal(j) * ParentBasis(p)
-
-    !         STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s * R_negative(Pnu) * Pnv * heaviSide
-    !       END DO            
+          DO i = 1, c
+            DO j = 1, c
+              ! (n sigma(u) n)*(n sigma(v) n)
+              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
+                                           * sigma(q, j) * sigma(p, i) 
 
 
-    !     END DO
-    !   END DO
-    ! END DO    
+              Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
+              
+              Pnv = theta * sigma(p, i) - gamma * Normal(i) * ParentBasis(p)
+
+              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv
+
+            END DO   
+          END DO
+        END DO
+      END DO    
+    END IF 
 
   !------------------------------------------------------------------------------
   END DO
@@ -2233,10 +2236,10 @@ FUNCTION tan2Normal2D ( tanAlpha ) RESULT( normalV )
 
 END FUNCTION
 
-FUNCTION R_negative(x) RESULT (R_x)
-  REAL(KIND=dp) :: x, R_x
+FUNCTION truncPositive(x, alpha) RESULT (R_x)
+  REAL(KIND=dp) :: x, alpha, R_x
 
-  R_x = 0.5 * (x - ABS(x))
+  R_x = 0.5 * (x + alpha - ABS(x-alpha))
 
 END FUNCTION
 
