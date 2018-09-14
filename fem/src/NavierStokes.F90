@@ -2196,17 +2196,16 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
 
           DO i = 1, c
             DO j = 1, c
-              ! (n sigma(u) n)*(n sigma(v) n)
-              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
+              ! (n*sigma(u)*n)*(n*sigma(v)*n)
+              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s * theta / gamma  & 
                                            * sigma(q, j) * sigma(p, i) 
-
-
-              Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
+              ! (n*sigma(u)*n - gamma*u*n)                             
+              Pnu = sigma(q, j) + gamma * Normal(j) * ParentBasis(q)
               
-              Pnv = theta * sigma(p, i) - gamma * Normal(i) * ParentBasis(p)
+              ! (n*sigma(v)*n - gamma*v*n)                             
+              Pnv = theta * sigma(p, i) + gamma * Normal(i) * ParentBasis(p)
 
-              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv
-
+              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s / gamma * truncPositive(Pnu,-Alpha) * Pnv
             END DO   
           END DO
         END DO
@@ -2236,11 +2235,13 @@ FUNCTION tan2Normal2D ( tanAlpha ) RESULT( normalV )
 
 END FUNCTION
 
+!------------------------------------------------------------------------------
+!   The projection to change the contact
+!------------------------------------------------------------------------------
 FUNCTION truncPositive(x, alpha) RESULT (R_x)
   REAL(KIND=dp) :: x, alpha, R_x
 
   R_x = 0.5 * (x + alpha - ABS(x-alpha))
-
 END FUNCTION
 
 
