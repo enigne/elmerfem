@@ -151,15 +151,15 @@
 
      REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
        Viscosity(:),FORCE(:), TimeForce(:), PrevDensity(:),Density(:),   &
-       U(:),V(:),W(:),MU(:),MV(:),MW(:), Pressure(:),Alpha(:),Beta(:),   &
-       ExtPressure(:),PrevPressure(:), HeatExpansionCoeff(:),            &
+       U(:),V(:),W(:),P(:),MU(:),MV(:),MW(:), Pressure(:),Alpha(:),      &
+       Beta(:),ExtPressure(:),PrevPressure(:), HeatExpansionCoeff(:),    &
        ReferenceTemperature(:), Permeability(:),Mx(:),My(:),Mz(:),       &
        LocalTemperature(:), GasConstant(:), HeatCapacity(:),             &
        LocalTempPrev(:),SlipCoeff(:,:), PseudoCompressibility(:),        &
        PseudoPressure(:), PSolution(:), Drag(:,:), PotentialField(:),    &
        PotentialCoefficient(:), bedPressure(:)
 
-     SAVE U,V,W,MASS,STIFF,LoadVector,Viscosity, TimeForce,FORCE,ElementNodes,  &
+     SAVE U,V,W,P,MASS,STIFF,LoadVector,Viscosity, TimeForce,FORCE,ElementNodes,&
        Alpha,Beta,ExtPressure,Pressure,PrevPressure, PrevDensity,Density,       &
        AllocationsDone,LocalNodes, HeatExpansionCoeff,ReferenceTemperature,     &
        Permeability,Mx,My,Mz,LayerThickness, SlipCoeff, SurfaceRoughness,       &
@@ -308,7 +308,7 @@
        
        IF( AllocationsDone ) THEN
           DEALLOCATE(                               &
-               U,  V,  W,                           &
+               U,  V,  W,  P,                       &
                MU, MV, MW,                          &
                Indexes,                             &
                Pressure,                            &
@@ -334,7 +334,7 @@
 
        END IF
 
-       ALLOCATE( U(N),  V(N),  W(N),                     &
+       ALLOCATE( U(N),  V(N),  W(N),  P(N),              &
                  MU(N), MV(N), MW(N),                    &
                  Indexes( N ),                           &
                  Pressure( N ),                          &
@@ -1340,14 +1340,17 @@
               ! Set not external pressure for fully grounded element (Necessary!!)
               IF ( ALL(BoundaryMask(1:n) > 0.0) ) ExtPressure(1:n) = 0.0
 
-              IF ( ANY(BoundaryMask(1:n) < 0.0) ) weaklySlip(1:n) = 0.0
+              ! IF ( ANY(BoundaryMask(1:n) < 0.0) ) weaklySlip(1:n) = 0.0
 
             END IF
 
             !===========================================================================================
             !        Nitsche's method: add un=0 for grounded and -sigma_nn=pw for floating 
+            !        Requires at least one node on the ground 
             !===========================================================================================
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
+              ! IF ( ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) > -0.5_dp) ) THEN
+                
                 CurElement => Model % CurrentElement
                 ! Get the parent element since derivatives of the basis functions are needed
                 ParentElement => Element % BoundaryInfo % Left
@@ -1357,6 +1360,7 @@
                 n = GetElementNOFnodes( Element )
                 k = GetElementNOFnodes( ParentElement )
 
+                ! Velocity components
                 SELECT CASE( NSDOFs )
                   CASE(3)
                     U(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
@@ -1367,14 +1371,16 @@
                     V(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-2)
                     W(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k))-1)
                 END SELECT
+                !Pressure components
+                P(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k)))
 
                 Density(1:k)   = GetParentMatProp( 'Density' )
                 Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
 
                 CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
                   Element, ParentElement, n, k, nIntegration, weaklySlip, &
-                  Viscosity, Density, U, V, W, ExtPressure, NormalTangential, &
-                  NetPressure, BoundaryMask, GLratio)
+                  Viscosity, Density, U, V, W, P, ExtPressure, NormalTangential, &
+                  NetPressure, BoundaryMask, GLratio, outputFlag)
                 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 
@@ -1383,13 +1389,16 @@
                 FORCE = 0.0d0
 
                 ! Remove water pressure from N-S assembly
-                ExtPressure(1:n) = 0.0
+                ! ExtPressure(1:n) = 0.0
+              ! END IF
             END IF
             !=======================================================================
             !             Output Setup
             !=======================================================================
             outputFlag = .FALSE.
-            IF ( iter == 1) outputFlag = .TRUE.
+            IF ( iter > 0) THEN
+              outputFlag = GetLogical( BC, 'Output for Debugging', GotIt)
+            END IF 
           END IF
 !===============================================================================
 
