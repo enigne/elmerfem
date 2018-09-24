@@ -1966,27 +1966,32 @@ MODULE NavierStokes
 !------------------------------------------------------------------------------
 
 !------------------------------------------------------------------------------
-SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
-                                n, np, nIntegration, EpsilonBoundary, Nodalmu, &
-                                Nodalrho, Ux, Uy, Uz, Psol, NodalExtPressure, &
-                                NormalTangential, NodalNetPressure, BoundaryMask, &
-                                GLratio, outputFlag )
-   
+SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, &
+                                  LoadVector, Element, ParentElement, n, np, nIntegration, &
+                                  EpsilonBoundary, Nodalmu, Nodalrho, Ux, Uy, Uz, Psol, &
+                                  NodalExtPressure, NodalBedPressure, NodalSlipCoeff,&
+                                  NormalTangential, bslope, BoundaryMask, NodalNetPressure, &
+                                  GLratio, outputFlag )
+!------------------------------------------------------------------------------
   USE ElementUtils
-
+!------------------------------------------------------------------------------
   IMPLICIT NONE
   REAL(KIND=dp), INTENT(INOUT)         :: STIFF(:,:), FORCE(:)
-  REAL(KIND=dp), INTENT(IN)            :: LOAD(:,:), EpsilonBoundary(:)
+  REAL(KIND=dp), INTENT(INOUT)         :: BoundaryMatrix(:,:), BoundaryVector(:)
+
+  REAL(KIND=dp), INTENT(IN)            :: LoadVector(:,:), EpsilonBoundary(:)
   TYPE(Element_t), POINTER, INTENT(IN) :: Element, ParentElement
   INTEGER, INTENT(IN)                  :: n, np, nIntegration
   REAL(KIND=dp), INTENT(IN)            :: Nodalmu(:),Nodalrho(:)
   REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz,Psol
   REAL(KIND=dp), INTENT(IN)            :: NodalExtPressure(:), NodalNetPressure(:)
-  REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio
+  REAL(KIND=dp), INTENT(IN)            :: NodalBedPressure(:), NodalSlipCoeff(:,:)
+  REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio, bslope
   LOGICAL, INTENT(IN)                  :: NormalTangential, outputFlag
 
 !------------------------------------------------------------------------------
-
+!  Local variables
+!------------------------------------------------------------------------------
   TYPE(Nodes_t) :: Nodes, ParentNodes
   TYPE(GaussIntegrationPoints_t) :: IntegStuff
 
@@ -1996,12 +2001,12 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   REAL(KIND=dp) :: Normal(3), ParentU, ParentV, ParentW
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
-  REAL(KIND=dp) :: hydroLoad(3), Alpha, Vect(3),Tangent(3),Tangent2(3)
-  REAL(KIND=dp) :: Pnu, Pnv, theta, gamma
+  REAL(KIND=dp) :: Load(3), Alpha, Vect(3),Tangent(3),Tangent2(3)
+  REAL(KIND=dp) :: Pnu, Pnv, theta, gamma, SlipCoeff, MassFlux
 
   INTEGER :: i, j, p, q, t, dim, c, k, l
 
-  REAL(kind=dp) :: e, g, h, heaviSide, pressure_Integ, nSn, Un
+  REAL(kind=dp) :: e, g, h, heaviSide, pressure_Integ, nSn, Un, Un_lo
 
   REAL(KIND=dp) :: SqrtElementMetric, U, V, W, S
   LOGICAL :: Stat
@@ -2012,11 +2017,15 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
   dim = CoordinateSystemDimension()
   c = dim + 1
 
+  ! Boundary Element
+  CALL GetElementNodes( Nodes, Element )
+  BoundaryMatrix = 0.0d0
+  BoundaryVector = 0.0d0
+
+  ! The full Element used for computing the gradient 
+  CALL GetElementNodes( ParentNodes, ParentElement )
   FORCE = 0.0d0
   STIFF = 0.0d0
-
-  CALL GetElementNodes( Nodes, Element )
-  CALL GetElementNodes( ParentNodes, ParentElement )
   !------------------------------------------------------------------------------
   !      Numerical integration
   !------------------------------------------------------------------------------
@@ -2054,11 +2063,13 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
      pressure_Integ = sum(BoundaryMask(1:n) * Basis(1:n))
 
      ! Determine heaviSide function value
-     IF ( pressure_Integ >= 0.0  ) THEN ! Grounded
-        heaviSide = 1.0d0
-     ELSE  
+     IF ( pressure_Integ > 0.5_dp  ) THEN ! Grounded
+        heaviSide = 1.0_dp
+     ELSE IF ( pressure_Integ < -0.5_dp  ) THEN 
         ! Floating
-        heaviSide = 0.0d0 
+        heaviSide = -1.0_dp
+     ELSE
+        heaviSide = 0.0_dp
      END IF
     !------------------------------------------------------------------------------
     !   Basis function & derivatives at the integration point from Parent Element
@@ -2098,7 +2109,8 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     END DO
 
     !------------------------------------------------------------------------------
-    !        The boundary terms from integration by parts
+    !   The boundary terms from integration by parts, the derivatives 
+    !   of the basis functions requires Parent Element
     !------------------------------------------------------------------------------
     sigma = 0.0_dp
 
@@ -2109,55 +2121,35 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
       sigma(q, c) = - ParentBasis(q)
     END DO
 
+    !------------------------------------------------------------------------------
+    !   The coefficients only live on the boundary
+    !------------------------------------------------------------------------------
     e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
-
     h = ElementDiameter( Element, Nodes )
-
     gamma = e / h
-    
     theta = 1.0
-
     Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) 
 
     !------------------------------------------------------------------------------
-    !        The Forcing terms: water pressure for the floating ice
+    !   The Forcing terms: gravity
     !------------------------------------------------------------------------------
-    hydroLoad(1:n) = 0.0_dp
+    Load = 0.0_dp
 
-     IF ( NormalTangential ) THEN
-       hydroLoad(1) = hydroLoad(1) + Alpha 
-     ELSE
-        DO i=1,dim
-           hydroLoad(i) = hydroLoad(i) + Alpha * Normal(i) 
-        END DO
-     END IF
+    DO i=1,dim
+      Load(i) = Load(i) + SUM( LoadVector(i,1:n)*Basis )
+    END DO
 
-     ! DO q=1,np
-     !   DO i=1,dim
-     !     k = (q-1)*c + i
-     !     IF ( NormalTangential ) THEN
-     !        SELECT CASE(i)
-     !           CASE(1)
-     !             Vect = Normal
-     !           CASE(2)
-     !             Vect = Tangent
-     !           CASE(3)
-     !             Vect = Tangent2
-     !        END SELECT
-
-     !        DO j=1,dim
-     !           l = (q-1)*c + j
-     !           Force(l) = Force(l) + &
-     !             s * ParentBasis(q) * hydroLoad(i) * Vect(j)
-     !        END DO
-     !     ELSE
-     !        Force(k) = Force(k) + s * ParentBasis(q) * hydroLoad(i)
-     !     END IF
-     !   END DO
-     ! END DO
+    ! ! Hydrology load
+    ! IF ( NormalTangential ) THEN
+    !  Load(1) = Load(1) + Alpha 
+    ! ELSE
+    !   DO i=1,dim
+    !      Load(i) = Load(i) + Alpha * Normal(i) 
+    !   END DO
+    ! END IF
 
     !------------------------------------------------------------------------------
-    !        Determine the Condition based on net pressure
+    !   Determine the Condition based on net pressure and grounded Mask
     !------------------------------------------------------------------------------
     ! Compute n*sigma*n
     nSn = 0.0_dp
@@ -2166,31 +2158,120 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, LOAD, Element, ParentElement,&
     END DO
 
     ! u*n
-    Un = SUM(Ux(1:n) * Basis(1:n))*Normal(1) + SUM(Uy(1:n) * Basis(1:n))*Normal(2)
+    Un = SUM(Ux(1:np) * ParentBasis(1:np)) * Normal(1) + SUM(Uy(1:np) * ParentBasis(1:np)) * Normal(2)
+
+    ! Check the conditions(pw=-Alpha)
+    ! n*sigma*n+gamma*u*n > -pw: grounded
+    ! n*sigma*n+gamma*u*n <= -pw: floating
+    IF (heaviSide == 0.0_dp) THEN
+      IF (outputFlag) THEN
+        WRITE(*,*)  nSn, gamma*Un,'=========', (nSn- gamma*Un) - Alpha, '------',Un, ParentU
+      END IF
+
+      IF ((nSn- gamma*Un) <= Alpha ) THEN
+        heaviSide = 1.0_dp
+      ELSE
+      ! IF (outputFlag) THEN
+      !   WRITE(*,*)  nSn-gamma*Un,'=========', Alpha, '------',heaviSide, ParentU
+      ! END IF
+        heaviSide = -1.0_dp
+      END IF
+    END IF
 
     !------------------------------------------------------------------------------
-    !        The Nitsche's method for Contact: only for the GL element 
+    !   The Nitsche's method for Contact from the whole Parent Element
     !------------------------------------------------------------------------------
-    IF ( heaviSide > 0.0 ) THEN 
-      DO p = 1, np
+    DO p = 1, np
+      DO i = 1, c
+        ! (n*sigma(v)*n - gamma*v*n)                             
+        Pnv = theta * sigma(p, i) - gamma * Normal(i) * ParentBasis(p)
+
         DO q = 1, np
-          DO i = 1, c
-            DO j = 1, c
-              ! (n*sigma(u)*n)*(n*sigma(v)*n)
-              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s * theta / gamma  & 
-                                           * sigma(q, j) * sigma(p, i) 
-              ! (n*sigma(u)*n - gamma*u*n)                             
-              Pnu = sigma(q, j) + gamma * Normal(j) * ParentBasis(q)
-              
-              ! (n*sigma(v)*n - gamma*v*n)                             
-              Pnv = theta * sigma(p, i) + gamma * Normal(i) * ParentBasis(p)
+          DO j = 1, c
+            ! (n*sigma(u)*n)*(n*sigma(v)*n)
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
+                                         * sigma(q, j) * sigma(p, i) 
+            ! (n*sigma(u)*n - gamma*u*n)    
+            IF ( heaviSide >= 0.0_dp ) THEN 
+              Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
+            ELSE 
+              Pnu = 0.0_dp
+            END IF
 
-              STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s / gamma * Pnu * Pnv
-            END DO   
-          END DO
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv
+          END DO   
         END DO
-      END DO    
-    END IF 
+
+        ! Floating nodes
+        IF (heaviSide <= 0.0_dp) THEN
+          k = (p-1)*c + i
+          Force(k) = Force(k) - s / gamma * Pnv * Alpha   
+        END IF
+      END DO
+    END DO    
+
+    !------------------------------------------------------------------------------
+    !   Assemble for the slip boundary conditions on the Boundary Element
+    !------------------------------------------------------------------------------
+    IF ( ANY( NodalSlipCoeff(:,:) /= 0.0d0 ) ) THEN
+      DO p=1,n
+        DO q=1,n
+          DO i=1,dim
+            SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )  
+            
+            IF ( NormalTangential ) THEN
+              SELECT CASE(i)
+                CASE(1)
+                  Vect = Normal
+                CASE(2)
+                  Vect = Tangent
+                CASE(3)
+                  Vect = Tangent2
+              END SELECT
+
+              DO j=1,dim
+                DO k=1,dim
+                  BoundaryMatrix( (p-1)*c+j,(q-1)*c+k ) = &
+                      BoundaryMatrix( (p-1)*c+j,(q-1)*c+k ) + &
+                          s * SlipCoeff * Basis(q) * Basis(p) * Vect(j) * Vect(k)
+                END DO
+              END DO
+            ELSE
+              BoundaryMatrix( (p-1)*c+i,(q-1)*c+i ) = &
+                  BoundaryMatrix( (p-1)*c+i,(q-1)*c+i ) + &
+                      s * SlipCoeff * Basis(q) * Basis(p)
+             END IF
+         END DO
+       END DO
+      END DO
+    END IF
+
+    ! ------------------------------------------------------------------------------
+    !   Assemble the load on the Boundary Element
+    ! ------------------------------------------------------------------------------
+    DO q=1,n
+      DO i=1,dim
+        k = (q-1)*c + i
+        IF ( NormalTangential ) THEN
+          SELECT CASE(i)
+            CASE(1)
+              Vect = Normal
+            CASE(2)
+              Vect = Tangent
+            CASE(3)
+              Vect = Tangent2
+          END SELECT
+
+          DO j=1,dim
+            l = (q-1)*c + j
+            BoundaryVector(l) = BoundaryVector(l) + &
+                s * Basis(q) * Load(i) * Vect(j)
+          END DO
+        ELSE
+          BoundaryVector(k) = BoundaryVector(k) + s * Basis(q)*Load(i)
+        END IF
+      END DO
+    END DO
 
   !------------------------------------------------------------------------------
   END DO

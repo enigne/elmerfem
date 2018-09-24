@@ -149,7 +149,8 @@
                      betaReduced(:), EpsilonBoundary(:), BoundaryMask(:)
 !=========================================================================
 
-     REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), LoadVector(:,:), &
+     REAL(KIND=dp),ALLOCATABLE :: MASS(:,:),STIFF(:,:), BoundaryMatrix(:,:), &
+       BoundaryVector(:), LoadVector(:,:), &
        Viscosity(:),FORCE(:), TimeForce(:), PrevDensity(:),Density(:),   &
        U(:),V(:),W(:),P(:),MU(:),MV(:),MW(:), Pressure(:),Alpha(:),      &
        Beta(:),ExtPressure(:),PrevPressure(:), HeatExpansionCoeff(:),    &
@@ -159,7 +160,8 @@
        PseudoPressure(:), PSolution(:), Drag(:,:), PotentialField(:),    &
        PotentialCoefficient(:), bedPressure(:)
 
-     SAVE U,V,W,P,MASS,STIFF,LoadVector,Viscosity, TimeForce,FORCE,ElementNodes,&
+     SAVE U,V,W,P,MASS,STIFF,LoadVector,BoundaryMatrix,BoundaryVector, &
+       Viscosity, TimeForce,FORCE,ElementNodes,&
        Alpha,Beta,ExtPressure,Pressure,PrevPressure, PrevDensity,Density,       &
        AllocationsDone,LocalNodes, HeatExpansionCoeff,ReferenceTemperature,     &
        Permeability,Mx,My,Mz,LayerThickness, SlipCoeff, SurfaceRoughness,       &
@@ -322,6 +324,7 @@
                SlipCoeff, Drag,                     &
                TimeForce,FORCE, Viscosity,          &
                MASS,  STIFF,                        &
+               BoundaryMatrix,  BoundaryVector,     &
                HeatExpansionCoeff,                  &
                GasConstant, HeatCapacity,           &
                ReferenceTemperature,                & 
@@ -350,6 +353,8 @@
                  FORCE( 2*NSDOFs*N ), Viscosity( N ), &
                  MASS(  2*NSDOFs*N,2*NSDOFs*N ),&
                  STIFF( 2*NSDOFs*N,2*NSDOFs*N ),&
+                 BoundaryMatrix( 2*NSDOFs*N,2*NSDOFs*N ),&
+                 BoundaryVector( 2*NSDOFs*N ),           &
                  HeatExpansionCoeff(N),                  &
                  GasConstant( N ), HeatCapacity( N ),    &
                  ReferenceTemperature(N),                & 
@@ -1319,15 +1324,15 @@
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
               DO jj = 1, n
                 ! Grounded (Geometrically)
-                IF ( GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= -0.5_dp ) THEN
+                IF ( GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0.5_dp ) THEN
                   BoundaryMask(jj) = 1.0_dp
-                  ! Check GLpara
-                  IF ( GroundingLineParaPerm(Element % NodeIndexes(jj)) > 0 ) THEN
-                    ! net pressure up
-                    IF ( GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp ) THEN
-                      BoundaryMask(jj) = 0.0_dp
-                    END IF
-                  END IF
+                  ! ! Check GLpara
+                  ! IF ( GroundingLineParaPerm(Element % NodeIndexes(jj)) > 0 ) THEN
+                  !   ! net pressure up
+                  !   IF ( GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp ) THEN
+                  !     BoundaryMask(jj) = 0.0_dp
+                  !   END IF
+                  ! END IF
                 ! Not grounded (Geometrically)
                 ELSE IF  (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) < -0.5_dp) THEN
                   BoundaryMask(jj) = -1.0_dp
@@ -1335,10 +1340,10 @@
               END DO
 
               ! Element with floating nodes
-              IF ( ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) < 0.0) ) BoundaryMask(1:n) = -1.0_dp
+              IF ( ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) == 0.0) ) BoundaryMask(1:n) = 0.0_dp
 
               ! Set not external pressure for fully grounded element (Necessary!!)
-              IF ( ALL(BoundaryMask(1:n) > 0.0) ) ExtPressure(1:n) = 0.0
+              ! IF ( ALL(BoundaryMask(1:n) > 0.0) ) ExtPressure(1:n) = 0.0
 
               ! IF ( ANY(BoundaryMask(1:n) < 0.0) ) weaklySlip(1:n) = 0.0
 
@@ -1377,19 +1382,30 @@
                 Density(1:k)   = GetParentMatProp( 'Density' )
                 Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
 
-                CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
-                  Element, ParentElement, n, k, nIntegration, weaklySlip, &
-                  Viscosity, Density, U, V, W, P, ExtPressure, NormalTangential, &
-                  NetPressure, BoundaryMask, GLratio, outputFlag)
+                ! CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
+                !   Element, ParentElement, n, k, nIntegration, weaklySlip, &
+                !   Viscosity, Density, U, V, W, P, ExtPressure, NormalTangential, &
+                !   NetPressure, BoundaryMask, GLratio, outputFlag)
                 
+                BoundaryMatrix = 0.0d0
+                BoundaryVector = 0.0d0
+                CALL StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, &
+                                  LoadVector, Element, ParentElement, n, k, nIntegration, &
+                                  weaklySlip, Viscosity, Density, U, V, W, P, &
+                                  ExtPressure, ExtPressure, SlipCoeff,&
+                                  NormalTangential, bSlopEle, BoundaryMask, NetPressure, &
+                                  GLratio, outputFlag )
+
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
+
+                CALL DefaultUpdateEquations( BoundaryMatrix, BoundaryVector, Element )
 
                 Model % CurrentElement => CurElement 
                 STIFF = 0.0d0
                 FORCE = 0.0d0
 
                 ! Remove water pressure from N-S assembly
-                ! ExtPressure(1:n) = 0.0
+                ExtPressure(1:n) = 0.0
               ! END IF
             END IF
             !=======================================================================
@@ -1406,13 +1422,7 @@
 !------------------------------------------------------------------------------
           SELECT CASE( CurrentCoordinateSystem() )
           CASE( Cartesian )
-            IF ( GLParaFlag .AND. (GLratio < 1.0_dp) ) THEN
-              CALL NavierStokesBoundaryPara(  STIFF, FORCE, LoadVector, &
-                  Alpha, Beta, ExtPressure, bedPressure, SlipCoeff,  &
-                  NormalTangential, Element, n, ElementNodes, nIntegration, &
-                  GLratio, bSlopEle, outputFlag, PressureParamFlag, &
-                  NormalParamFlag, NetPressure, betaReduced)
-            ELSE
+            IF ( ANY(GroundedMaskPerm(Element % NodeIndexes) <= 0) ) THEN
               CALL NavierStokesBoundary(  STIFF, FORCE, &
                LoadVector, Alpha, Beta, ExtPressure, SlipCoeff, NormalTangential,   &
                   Element, n, ElementNodes )
