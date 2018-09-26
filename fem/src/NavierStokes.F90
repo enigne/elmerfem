@@ -2001,8 +2001,8 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp) :: Normal(3), ParentU, ParentV, ParentW
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
-  REAL(KIND=dp) :: Load(3), Alpha, Vect(3),Tangent(3),Tangent2(3)
-  REAL(KIND=dp) :: Pnu, Pnv, theta, gamma, SlipCoeff, MassFlux
+  REAL(KIND=dp) :: Load(3), Vect(3),Tangent(3),Tangent2(3)
+  REAL(KIND=dp) :: Pnu, Pnv, theta, gamma, SlipCoeff, MassFlux, Alpha, bedAlpha
 
   INTEGER :: i, j, p, q, t, dim, c, k, l
 
@@ -2056,21 +2056,6 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
         CALL TangentDirections( Normal, Tangent, Tangent2 ) 
      END SELECT
 
-    !------------------------------------------------------------------------------
-    !    Compute heaviside function according the the net pressure
-    !------------------------------------------------------------------------------
-    ! Net pressure at the current gauss points
-     pressure_Integ = sum(BoundaryMask(1:n) * Basis(1:n))
-
-     ! Determine heaviSide function value
-     IF ( pressure_Integ > 0.5_dp  ) THEN ! Grounded
-        heaviSide = 1.0_dp
-     ELSE IF ( pressure_Integ < -0.5_dp  ) THEN 
-        ! Floating
-        heaviSide = -1.0_dp
-     ELSE
-        heaviSide = 0.0_dp
-     END IF
     !------------------------------------------------------------------------------
     !   Basis function & derivatives at the integration point from Parent Element
     !------------------------------------------------------------------------------
@@ -2129,29 +2114,28 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     gamma = e / h
     theta = 1.0
     Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) 
+    bedAlpha = SUM( NodalBedPressure(1:n) * Basis(1:n) ) 
 
     !------------------------------------------------------------------------------
-    !   The Forcing terms: gravity
+    !    Compute heaviside function according the geometry
     !------------------------------------------------------------------------------
-    Load = 0.0_dp
+    ! Net pressure at the current gauss points
+     pressure_Integ = sum(BoundaryMask(1:n) * Basis(1:n))
 
-    DO i=1,dim
-      Load(i) = Load(i) + SUM( LoadVector(i,1:n)*Basis )
-    END DO
-
-    ! ! Hydrology load
-    ! IF ( NormalTangential ) THEN
-    !  Load(1) = Load(1) + Alpha 
-    ! ELSE
-    !   DO i=1,dim
-    !      Load(i) = Load(i) + Alpha * Normal(i) 
-    !   END DO
-    ! END IF
+     ! Determine heaviSide function value
+     IF ( pressure_Integ >= 1.0_dp  ) THEN ! Grounded
+        heaviSide = 1.0_dp
+     ELSE IF ( pressure_Integ <= -1.0_dp  ) THEN 
+        ! Floating
+        heaviSide = -1.0_dp
+     ELSE
+        heaviSide = 0.0_dp
+     END IF
 
     !------------------------------------------------------------------------------
     !   Determine the Condition based on net pressure and grounded Mask
     !------------------------------------------------------------------------------
-    ! Compute n*sigma*n
+    ! Compute n*sigma*n from previous solutions in the nonlinear iterations
     nSn = 0.0_dp
     DO q = 1, np
       nSn = nSn + sigma(q, 1)*Ux(q)+ sigma(q, 2)*Uy(q) + sigma(q, 3)*Psol(q)
@@ -2164,17 +2148,13 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     ! n*sigma*n+gamma*u*n > -pw: grounded
     ! n*sigma*n+gamma*u*n <= -pw: floating
     IF (heaviSide == 0.0_dp) THEN
-      IF (outputFlag) THEN
-        WRITE(*,*)  nSn, gamma*Un,'=========', (nSn- gamma*Un) - Alpha, '------',Un, ParentU
-      END IF
-
-      IF ((nSn- gamma*Un) <= Alpha ) THEN
-        heaviSide = 1.0_dp
+      IF ((nSn) <= bedAlpha ) THEN
+        heaviSide = 0.5_dp
       ELSE
-      ! IF (outputFlag) THEN
-      !   WRITE(*,*)  nSn-gamma*Un,'=========', Alpha, '------',heaviSide, ParentU
-      ! END IF
-        heaviSide = -1.0_dp
+        IF (outputFlag) THEN
+          WRITE(*,*)  nSn, gamma*Un,'=========', (nSn- gamma*Un) - Alpha, '------',Un, ParentU
+        END IF
+        heaviSide = -0.5_dp
       END IF
     END IF
 
@@ -2192,18 +2172,18 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
             STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
                                          * sigma(q, j) * sigma(p, i) 
             ! (n*sigma(u)*n - gamma*u*n)    
-            IF ( heaviSide >= 0.0_dp ) THEN 
+            IF (( heaviSide > -0.5_dp) .AND. (pressure_Integ > 0) ) THEN 
               Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
             ELSE 
               Pnu = 0.0_dp
             END IF
 
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv * ABS(heaviside) 
           END DO   
         END DO
 
         ! Floating nodes
-        IF (heaviSide <= 0.0_dp) THEN
+        IF ( (heaviSide <= -0.5_dp) .OR. (pressure_Integ <= 0) ) THEN
           k = (p-1)*c + i
           Force(k) = Force(k) - s / gamma * Pnv * Alpha   
         END IF
@@ -2217,8 +2197,21 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
       DO p=1,n
         DO q=1,n
           DO i=1,dim
-            SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )  
-            
+            IF ( i == 1 ) THEN
+              ! Damping should start from the first truely floating node
+              IF (heaviSide <= -1.0_dp) THEN
+                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
+              ELSE 
+                SlipCoeff = 0.0d0
+              END IF 
+            ELSE
+              ! Friction is computed in the GL element 
+              IF ( heaviSide > -1.0_dp ) THEN 
+                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * ABS(heaviside) 
+              ELSE 
+                SlipCoeff = 0.0d0
+              END IF    
+            END IF      
             IF ( NormalTangential ) THEN
               SELECT CASE(i)
                 CASE(1)
@@ -2245,6 +2238,15 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
        END DO
       END DO
     END IF
+
+    !------------------------------------------------------------------------------
+    !   The Forcing terms: gravity
+    !------------------------------------------------------------------------------
+    Load = 0.0_dp
+
+    DO i=1,dim
+      Load(i) = Load(i) + SUM( LoadVector(i,1:n)*Basis )
+    END DO
 
     ! ------------------------------------------------------------------------------
     !   Assemble the load on the Boundary Element

@@ -1323,24 +1323,25 @@
 
             IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) THEN
               DO jj = 1, n
-                ! Grounded (Geometrically)
-                IF ( GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0.5_dp ) THEN
-                  BoundaryMask(jj) = 1.0_dp
-                  ! ! Check GLpara
-                  ! IF ( GroundingLineParaPerm(Element % NodeIndexes(jj)) > 0 ) THEN
-                  !   ! net pressure up
-                  !   IF ( GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp ) THEN
-                  !     BoundaryMask(jj) = 0.0_dp
-                  !   END IF
-                  ! END IF
-                ! Not grounded (Geometrically)
-                ELSE IF  (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) < -0.5_dp) THEN
-                  BoundaryMask(jj) = -1.0_dp
-                END IF
+                ! ! Grounded (Geometrically)
+                ! IF ( GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) >= 0.5_dp ) THEN
+                !   BoundaryMask(jj) = 1.0_dp
+                !   ! ! Check GLpara
+                !   ! IF ( GroundingLineParaPerm(Element % NodeIndexes(jj)) > 0 ) THEN
+                !   !   ! net pressure up
+                !   !   IF ( GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj))) > 0.0_dp ) THEN
+                !   !     BoundaryMask(jj) = 0.0_dp
+                !   !   END IF
+                !   ! END IF
+                ! ! Not grounded (Geometrically)
+                ! ELSE IF  (GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj))) < -0.5_dp) THEN
+                !   BoundaryMask(jj) = -1.0_dp
+                ! END IF
+                BoundaryMask(jj) = GroundedMask(GroundedMaskPerm(Element % NodeIndexes(jj)))
               END DO
 
               ! Element with floating nodes
-              IF ( ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) == 0.0) ) BoundaryMask(1:n) = 0.0_dp
+              ! IF ( ANY(GroundedMask(GroundedMaskPerm(Element % NodeIndexes(1:n))) == 0.0) ) BoundaryMask(1:n) = 0.0_dp
 
               ! Set not external pressure for fully grounded element (Necessary!!)
               ! IF ( ALL(BoundaryMask(1:n) > 0.0) ) ExtPressure(1:n) = 0.0
@@ -1379,22 +1380,17 @@
                 !Pressure components
                 P(1:k) = FlowSolution(NSDOFs*FlowPerm(ParentElement % NodeIndexes(1:k)))
 
+                ! Physical parameters
                 Density(1:k)   = GetParentMatProp( 'Density' )
                 Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
-
-                ! CALL StokesNitscheBoundary( STIFF, FORCE, LoadVector, &
-                !   Element, ParentElement, n, k, nIntegration, weaklySlip, &
-                !   Viscosity, Density, U, V, W, P, ExtPressure, NormalTangential, &
-                !   NetPressure, BoundaryMask, GLratio, outputFlag)
-                
+               
                 BoundaryMatrix = 0.0d0
                 BoundaryVector = 0.0d0
                 CALL StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, &
                                   LoadVector, Element, ParentElement, n, k, nIntegration, &
-                                  weaklySlip, Viscosity, Density, U, V, W, P, &
-                                  ExtPressure, ExtPressure, SlipCoeff,&
-                                  NormalTangential, bSlopEle, BoundaryMask, NetPressure, &
-                                  GLratio, outputFlag )
+                                  weaklySlip, Viscosity, Density, U, V, W, P, ExtPressure, &
+                                  bedPressure, SlipCoeff, NormalTangential, bSlopEle, &
+                                  BoundaryMask, NetPressure, GLratio, outputFlag )
 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 
@@ -1422,6 +1418,7 @@
 !------------------------------------------------------------------------------
           SELECT CASE( CurrentCoordinateSystem() )
           CASE( Cartesian )
+            ! For the boundaries not on the bottom
             IF ( ANY(GroundedMaskPerm(Element % NodeIndexes) <= 0) ) THEN
               CALL NavierStokesBoundary(  STIFF, FORCE, &
                LoadVector, Alpha, Beta, ExtPressure, SlipCoeff, NormalTangential,   &
