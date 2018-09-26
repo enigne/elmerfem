@@ -600,40 +600,40 @@ FUNCTION SlidCoef_Contact_Para ( Model, nodenumber, y) RESULT(Bdrag)
 
         BoundaryElement => Model % CurrentElement
         ! Pure Grounded Element (especially for the first time step, GLpara=0)
-        IF (ALL(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) Friction = .TRUE. 
+        ! IF (ANY(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) Friction = .TRUE. 
+        IF ( ALL(GroundedMaskPerm(Element % NodeIndexes) > 0) ) Friction = .TRUE. 
+        ! ! At least one node is on the bedrock
+        ! IF ( ANY(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) THEN
+        !   IF ( GroundingLineParaPerm(nodenumber) > 0) THEN
+        !     ! Set friction for the element with at least one node at the bed, then check
+        !     Friction = .TRUE.
 
-        ! At least one node is on the bedrock
-        IF ( ANY(GroundedMask(GroundedMaskPerm(BoundaryElement % NodeIndexes))> -0.5 )) THEN
-          IF ( GroundingLineParaPerm(nodenumber) > 0) THEN
-            ! Set friction for the element with at least one node at the bed, then check
-            Friction = .TRUE.
+        !     ! Take away exceptions, contact but no pressure towards the bedrock
+        !     IF ( ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0) ) Friction = .FALSE.
 
-            ! Take away exceptions, contact but no pressure towards the bedrock
-            IF ( ALL(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0) ) Friction = .FALSE.
+        !     ! Contact and has pressure downward
+        !     IF ( (GroundingLinePara(GroundingLineParaPerm(nodenumber)) < 0.0) .AND. &
+        !          (GroundedMask(GroundedMaskPerm(nodenumber)) > -0.5) ) Friction = .TRUE.
 
-            ! Contact and has pressure downward
-            IF ( (GroundingLinePara(GroundingLineParaPerm(nodenumber)) < 0.0) .AND. &
-                 (GroundedMask(GroundedMaskPerm(nodenumber)) > -0.5) ) Friction = .TRUE.
+        !     ! ----> GL element with grounded and floating nodes
+        !     IF ( ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0)  .AND. &
+        !          ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) < 0.0)) THEN
+        !       ! Generally this is the GL element
+        !       Friction = .TRUE.
 
-            ! ----> GL element with grounded and floating nodes
-            IF ( ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) > 0.0)  .AND. &
-                 ANY(GroundingLinePara(GroundingLineParaPerm(BoundaryElement % NodeIndexes)) < 0.0)) THEN
-              ! Generally this is the GL element
-              Friction = .TRUE.
-
-              specialCaseFlag = .TRUE.
-              ! One special case: no the grounded node has downward net pressure 
-              n = GetElementNOFNodes()
-              DO ii = 1, n
-                jj = BoundaryElement % NodeIndexes(ii)
-                IF ( (GroundedMask(GroundedMaskPerm(jj)) > -0.5) .AND. (GroundingLinePara(GroundingLineParaPerm(jj)) < 0.0 ) )  THEN
-                  specialCaseFlag = .FALSE.
-                END IF
-              END DO
-              IF (specialCaseFlag) Friction = .FALSE.
-            END IF
-          END IF
-        END IF
+        !       specialCaseFlag = .TRUE.
+        !       ! One special case: no the grounded node has downward net pressure 
+        !       n = GetElementNOFNodes()
+        !       DO ii = 1, n
+        !         jj = BoundaryElement % NodeIndexes(ii)
+        !         IF ( (GroundedMask(GroundedMaskPerm(jj)) > -0.5) .AND. (GroundingLinePara(GroundingLineParaPerm(jj)) < 0.0 ) )  THEN
+        !           specialCaseFlag = .FALSE.
+        !         END IF
+        !       END DO
+        !       IF (specialCaseFlag) Friction = .FALSE.
+        !     END IF
+        !   END IF
+        ! END IF
      !=============================================================
      CASE DEFAULT
         WRITE(Message, '(A,A)') 'GL type not recognised ', GLtype 
