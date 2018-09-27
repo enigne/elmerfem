@@ -2148,13 +2148,11 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     ! n*sigma*n+gamma*u*n > -pw: grounded
     ! n*sigma*n+gamma*u*n <= -pw: floating
     IF (heaviSide == 0.0_dp) THEN
-      IF ((nSn) <= bedAlpha ) THEN
+      IF ((nSn- gamma*Un) <= Alpha ) THEN
         heaviSide = 0.5_dp
       ELSE
-        IF (outputFlag) THEN
-          WRITE(*,*)  nSn, gamma*Un,'=========', (nSn- gamma*Un) - Alpha, '------',Un, ParentU
-        END IF
         heaviSide = -0.5_dp
+        Alpha = bedAlpha
       END IF
     END IF
 
@@ -2178,7 +2176,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
               Pnu = 0.0_dp
             END IF
 
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv * ABS(heaviside) 
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv 
           END DO   
         END DO
 
@@ -2199,14 +2197,14 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
           DO i=1,dim
             IF ( i == 1 ) THEN
               ! Damping should start from the first truely floating node
-              IF (heaviSide <= -1.0_dp) THEN
+              IF (heaviSide <= 0.5_dp) THEN
                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
               ELSE 
                 SlipCoeff = 0.0d0
               END IF 
             ELSE
               ! Friction is computed in the GL element 
-              IF ( heaviSide > -1.0_dp ) THEN 
+              IF ( (heaviSide > 0.0_dp) ) THEN 
                 SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * ABS(heaviside) 
               ELSE 
                 SlipCoeff = 0.0d0
