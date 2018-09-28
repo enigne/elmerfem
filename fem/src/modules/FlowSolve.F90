@@ -139,7 +139,8 @@
     INTEGER, POINTER :: GroundingLineParaPerm(:), GroundedMaskPerm(:)
     INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex, smoothingType
     REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, GLratio, bSlopEle, &
-                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange
+                     weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange, &
+                     NCtheta
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE., &
@@ -1383,6 +1384,13 @@
                 ! Physical parameters
                 Density(1:k)   = GetParentMatProp( 'Density' )
                 Viscosity(1:k) = GetParentMatProp( 'Viscosity' )
+
+                !------------------------------------------------------------------------
+                !   choose different theta for the Nitsche's contact
+                NCtheta =  GetConstReal( BC, 'Nitsche contact theta', GotIt)
+                IF ( .NOT. GotIt ) NCtheta = 1.0
+                !------------------------------------------------------------------------
+
                
                 BoundaryMatrix = 0.0d0
                 BoundaryVector = 0.0d0
@@ -1390,7 +1398,7 @@
                                   LoadVector, Element, ParentElement, n, k, nIntegration, &
                                   weaklySlip, Viscosity, Density, U, V, W, P, ExtPressure, &
                                   bedPressure, SlipCoeff, NormalTangential, bSlopEle, &
-                                  BoundaryMask, NetPressure, GLratio, outputFlag )
+                                  BoundaryMask, NetPressure, GLratio, NCtheta, outputFlag )
 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 

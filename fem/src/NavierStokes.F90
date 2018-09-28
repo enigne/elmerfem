@@ -1971,7 +1971,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
                                   EpsilonBoundary, Nodalmu, Nodalrho, Ux, Uy, Uz, Psol, &
                                   NodalExtPressure, NodalBedPressure, NodalSlipCoeff,&
                                   NormalTangential, bslope, BoundaryMask, NodalNetPressure, &
-                                  GLratio, outputFlag )
+                                  GLratio, NCtheta, outputFlag )
 !------------------------------------------------------------------------------
   USE ElementUtils
 !------------------------------------------------------------------------------
@@ -2002,7 +2002,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
   REAL(KIND=dp) :: Load(3), Vect(3),Tangent(3),Tangent2(3)
-  REAL(KIND=dp) :: Pnu, Pnv, theta, gamma, SlipCoeff, MassFlux, Alpha, bedAlpha
+  REAL(KIND=dp) :: Pnu, Pnv, NCtheta, gamma, SlipCoeff, MassFlux, Alpha, bedAlpha
 
   INTEGER :: i, j, p, q, t, dim, c, k, l
 
@@ -2112,7 +2112,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
     h = ElementDiameter( Element, Nodes )
     gamma = e / h
-    theta = 1.0
+    ! NCtheta = 1.0
     Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) 
     bedAlpha = SUM( NodalBedPressure(1:n) * Basis(1:n) ) 
 
@@ -2162,12 +2162,12 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     DO p = 1, np
       DO i = 1, c
         ! (n*sigma(v)*n - gamma*v*n)                             
-        Pnv = theta * sigma(p, i) - gamma * Normal(i) * ParentBasis(p)
+        Pnv = NCtheta * sigma(p, i) - gamma * Normal(i) * ParentBasis(p)
 
         DO q = 1, np
           DO j = 1, c
             ! (n*sigma(u)*n)*(n*sigma(v)*n)
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * theta / gamma  & 
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * NCtheta / gamma  & 
                                          * sigma(q, j) * sigma(p, i) 
             ! (n*sigma(u)*n - gamma*u*n)    
             IF (( heaviSide > -0.5_dp) .AND. (pressure_Integ > 0) ) THEN 
