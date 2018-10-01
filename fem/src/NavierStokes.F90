@@ -1998,7 +1998,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp) :: muder0, rho, mu
   REAL(KIND=dp) :: Basis(n), dBasisdx(n,3)
   REAL(KIND=dp) :: ParentBasis(np), ParentdBasisdx(np,3), ParentdBasisdn(np)
-  REAL(KIND=dp) :: Normal(3), ParentU, ParentV, ParentW
+  REAL(KIND=dp) :: Normal(3), nonPenNormal(3), ParentU, ParentV, ParentW
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
   REAL(KIND=dp) :: Load(3), Vect(3),Tangent(3),Tangent2(3)
@@ -2006,7 +2006,8 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
 
   INTEGER :: i, j, p, q, t, dim, c, k, l
 
-  REAL(kind=dp) :: e, g, h, heaviSide, pressure_Integ, nSn, Un, Un_lo
+  REAL(kind=dp) :: e, g, h,GMaskInteg, nSn, Un
+  REAL(kind=dp) :: betaHeaviSide, groundedHeaviSide
 
   REAL(KIND=dp) :: SqrtElementMetric, U, V, W, S
   LOGICAL :: Stat
@@ -2111,7 +2112,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     !------------------------------------------------------------------------------
     e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
     h = ElementDiameter( Element, Nodes )
-    gamma = e / h
+    gamma = e * h
     ! NCtheta = 1.0
     Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) 
     bedAlpha = SUM( NodalBedPressure(1:n) * Basis(1:n) ) 
@@ -2120,17 +2121,20 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     !    Compute heaviside function according the geometry
     !------------------------------------------------------------------------------
     ! Net pressure at the current gauss points
-     pressure_Integ = sum(BoundaryMask(1:n) * Basis(1:n))
+    GMaskInteg = sum(BoundaryMask(1:n) * Basis(1:n))
 
-     ! Determine heaviSide function value
-     IF ( pressure_Integ >= 1.0_dp  ) THEN ! Grounded
-        heaviSide = 1.0_dp
-     ELSE IF ( pressure_Integ <= -1.0_dp  ) THEN 
-        ! Floating
-        heaviSide = -1.0_dp
-     ELSE
-        heaviSide = 0.0_dp
-     END IF
+    ! Determine heaviSide function value
+    IF ( GMaskInteg >= 1.0_dp  ) THEN 
+      ! Grounded
+      groundedHeaviSide = 1.0
+      betaHeaviSide = 1.0
+    ELSE IF ( GMaskInteg <= -1.0_dp  ) THEN 
+      ! Floating
+      groundedHeaviSide = -1.0
+      betaHeaviSide = -1.0
+    ELSE
+      groundedHeaviSide = 0.0
+    END IF
 
     !------------------------------------------------------------------------------
     !   Determine the Condition based on net pressure and grounded Mask
@@ -2141,18 +2145,37 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
       nSn = nSn + sigma(q, 1)*Ux(q)+ sigma(q, 2)*Uy(q) + sigma(q, 3)*Psol(q)
     END DO
 
+    ! nonPenNormal = tan2Normal2D(bslope)
+    ! IF (GMaskInteg >= 0.0) THEN
+    !   Normal = nonPenNormal
+    ! END IF
+
     ! u*n
     Un = SUM(Ux(1:np) * ParentBasis(1:np)) * Normal(1) + SUM(Uy(1:np) * ParentBasis(1:np)) * Normal(2)
 
-    ! Check the conditions(pw=-Alpha)
-    ! n*sigma*n+gamma*u*n > -pw: grounded
-    ! n*sigma*n+gamma*u*n <= -pw: floating
-    IF (heaviSide == 0.0_dp) THEN
-      IF ((nSn- gamma*Un) <= Alpha ) THEN
-        heaviSide = 0.5_dp
-      ELSE
-        heaviSide = -0.5_dp
-        Alpha = bedAlpha
+    ! Check the conditions only for grounded element
+    ! TODO: check beta heaviside for floating element
+    ! n*sigma*n-gamma*u*n <= -pw: grounded
+    ! n*sigma*n-gamma*u*n > -pw: floating
+    IF (groundedHeaviSide == 0.0_dp) THEN
+      ! gamma = gamma / h
+      IF ( GMaskInteg >= 0.0) THEN
+        IF ((nSn- gamma*Un) < Alpha ) THEN
+          groundedHeaviSide = 1.0
+          betaHeaviSide = 1.0
+        ELSE
+          groundedHeaviSide = -1.0
+          betaHeaviSide = -1.0
+        END IF
+      ELSE 
+        ! TODO
+          groundedHeaviSide = -1.0
+      ! gamma = gamma / h
+          IF ((nSn) < Alpha ) THEN
+            betaHeaviSide = 0.0
+          ELSE
+            betaHeaviSide = -1.0
+          END IF
       END IF
     END IF
 
@@ -2170,21 +2193,16 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
             STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s * NCtheta / gamma  & 
                                          * sigma(q, j) * sigma(p, i) 
             ! (n*sigma(u)*n - gamma*u*n)    
-            IF (( heaviSide > -0.5_dp) .AND. (pressure_Integ > 0) ) THEN 
-              Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
-            ELSE 
-              Pnu = 0.0_dp
-            END IF
+            Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
 
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv 
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv &
+                                          * (groundedHeaviSide + 1.0) * 0.5
           END DO   
         END DO
 
         ! Floating nodes
-        IF ( (heaviSide <= -0.5_dp) .OR. (pressure_Integ <= 0) ) THEN
-          k = (p-1)*c + i
-          Force(k) = Force(k) - s / gamma * Pnv * Alpha   
-        END IF
+        k = (p-1)*c + i
+        Force(k) = Force(k) - s / gamma * Pnv * Alpha *(1.0 - groundedHeaviSide) * 0.5  
       END DO
     END DO    
 
@@ -2197,18 +2215,10 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
           DO i=1,dim
             IF ( i == 1 ) THEN
               ! Damping should start from the first truely floating node
-              IF (heaviSide <= 0.5_dp) THEN
-                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
-              ELSE 
-                SlipCoeff = 0.0d0
-              END IF 
+              SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * (1.0 - betaHeaviSide) * 0.5
             ELSE
               ! Friction is computed in the GL element 
-              IF ( (heaviSide > 0.0_dp) ) THEN 
-                SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * ABS(heaviside) 
-              ELSE 
-                SlipCoeff = 0.0d0
-              END IF    
+              SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )  * (betaHeaviSide + 1.0) * 0.5   
             END IF      
             IF ( NormalTangential ) THEN
               SELECT CASE(i)
