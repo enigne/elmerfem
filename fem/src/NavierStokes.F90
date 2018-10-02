@@ -2214,8 +2214,8 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
         DO q=1,n
           DO i=1,dim
             IF ( i == 1 ) THEN
-              ! Damping should start from the first truely floating node
-              SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) ) * (1.0 - betaHeaviSide) * 0.5
+              ! Implitit time stepping for all bottom boundary velocities, no additional effect on the grounded nodes.
+              SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )
             ELSE
               ! Friction is computed in the GL element 
               SlipCoeff = SUM( NodalSlipCoeff(i,1:n) * Basis(1:n) )  * (betaHeaviSide + 1.0) * 0.5   
