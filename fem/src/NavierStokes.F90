@@ -1971,7 +1971,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
                                   EpsilonBoundary, Nodalmu, Nodalrho, Ux, Uy, Uz, Psol, &
                                   NodalExtPressure, NodalBedPressure, NodalSlipCoeff,&
                                   NormalTangential, bslope, BoundaryMask, NodalNetPressure, &
-                                  GLratio, NCtheta, outputFlag )
+                                  GLratio, NCtheta, changeNormal, outputFlag )
 !------------------------------------------------------------------------------
   USE ElementUtils
 !------------------------------------------------------------------------------
@@ -1987,7 +1987,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp), INTENT(IN)            :: NodalExtPressure(:), NodalNetPressure(:)
   REAL(KIND=dp), INTENT(IN)            :: NodalBedPressure(:), NodalSlipCoeff(:,:)
   REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio, bslope
-  LOGICAL, INTENT(IN)                  :: NormalTangential, outputFlag
+  LOGICAL, INTENT(IN)                  :: NormalTangential, changeNormal, outputFlag
 
 !------------------------------------------------------------------------------
 !  Local variables
@@ -1998,7 +1998,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp) :: muder0, rho, mu
   REAL(KIND=dp) :: Basis(n), dBasisdx(n,3)
   REAL(KIND=dp) :: ParentBasis(np), ParentdBasisdx(np,3), ParentdBasisdn(np)
-  REAL(KIND=dp) :: Normal(3), nonPenNormal(3), ParentU, ParentV, ParentW
+  REAL(KIND=dp) :: Normal(3), slipBCNormal(3), ParentU, ParentV, ParentW
   REAL(KIND=dp) :: ParentNodalU(n), ParentNodalV(n), ParentNodalW(n)
   REAL(KIND=dp) :: sigma(np,4)
   REAL(KIND=dp) :: Load(3), Vect(3),Tangent(3),Tangent2(3)
@@ -2046,16 +2046,6 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     stat = ElementInfo( Element,Nodes,U,V,W,SqrtElementMetric, &
               Basis,dBasisdx )
     S = S * SqrtElementMetric
-
-     SELECT CASE( Element % TYPE % DIMENSION )
-     CASE(1)
-        Tangent(1) =  Normal(2)
-        Tangent(2) = -Normal(1)
-        Tangent(3) =  0.0_dp
-        Tangent2   =  0.0_dp
-     CASE(2)
-        CALL TangentDirections( Normal, Tangent, Tangent2 ) 
-     END SELECT
 
     !------------------------------------------------------------------------------
     !   Basis function & derivatives at the integration point from Parent Element
@@ -2146,9 +2136,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     END DO
 
     ! nonPenNormal = tan2Normal2D(bslope)
-    ! IF (GMaskInteg >= 0.0) THEN
-    !   Normal = nonPenNormal
-    ! END IF
+    slipBCNormal(1:3) = Normal(1:3)
 
     ! u*n
     Un = SUM(Ux(1:np) * ParentBasis(1:np)) * Normal(1) + SUM(Uy(1:np) * ParentBasis(1:np)) * Normal(2)
@@ -2171,13 +2159,32 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
         ! TODO
           groundedHeaviSide = -1.0
       ! gamma = gamma / h
-          IF ((nSn) < Alpha ) THEN
-            betaHeaviSide = -1.0
-          ELSE
+          IF ((nSn) < (bedAlpha) ) THEN
+            betaHeaviSide = 0.0
+            IF ( changeNormal ) THEN 
+              slipBCNormal = tan2Normal2D(bslope)
+            ELSE
+              slipBCNormal = Normal
+            END IF
+          ! ELSE IF ((nSn) < Alpha) THEN 
+          !   betaHeaviSide = 1.0 / (bedAlpha - Alpha) * nSn  - bedAlpha / (bedAlpha - Alpha)
+          !   WRITE(*, *) betaHeaviSide
+          ELSE 
             betaHeaviSide = -1.0
           END IF
       END IF
     END IF
+
+
+     SELECT CASE( Element % TYPE % DIMENSION )
+     CASE(1)
+        Tangent(1) =  slipBCNormal(2)
+        Tangent(2) = -slipBCNormal(1)
+        Tangent(3) =  0.0_dp
+        Tangent2   =  0.0_dp
+     CASE(2)
+        CALL TangentDirections( slipBCNormal, Tangent, Tangent2 ) 
+     END SELECT
 
     !------------------------------------------------------------------------------
     !   The Nitsche's method for Contact from the whole Parent Element

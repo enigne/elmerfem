@@ -144,7 +144,7 @@
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE., &
-               NormalParamFlag = .FALSE.
+               NormalParamFlag = .FALSE., changeNormal = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
     REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:), &
                      betaReduced(:), EpsilonBoundary(:), BoundaryMask(:)
@@ -1390,6 +1390,10 @@
                 NCtheta =  GetConstReal( BC, 'Nitsche contact theta', GotIt)
                 IF ( .NOT. GotIt ) NCtheta = 1.0
                 !------------------------------------------------------------------------
+                !   change normal vector for the grounded part at the FF element
+                changeNormal =  GetLogical( BC, 'change first floating normal', GotIt)
+                IF ( .NOT. GotIt ) changeNormal = .FALSE.
+                !------------------------------------------------------------------------
 
                
                 BoundaryMatrix = 0.0d0
@@ -1398,7 +1402,8 @@
                                   LoadVector, Element, ParentElement, n, k, nIntegration, &
                                   weaklySlip, Viscosity, Density, U, V, W, P, ExtPressure, &
                                   bedPressure, SlipCoeff, NormalTangential, bSlopEle, &
-                                  BoundaryMask, NetPressure, GLratio, NCtheta, outputFlag )
+                                  BoundaryMask, NetPressure, GLratio, NCtheta, changeNormal, &
+                                  outputFlag )
 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 
