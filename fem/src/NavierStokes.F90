@@ -1971,7 +1971,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
                                   EpsilonBoundary, Nodalmu, Nodalrho, Ux, Uy, Uz, Psol, &
                                   NodalExtPressure, NodalBedPressure, NodalSlipCoeff,&
                                   NormalTangential, bslope, BoundaryMask, NodalNetPressure, &
-                                  GLratio, NCtheta, changeNormal, outputFlag )
+                                  GLratio, NCtheta, changeNormal, comparePressureParam, outputFlag )
 !------------------------------------------------------------------------------
   USE ElementUtils
 !------------------------------------------------------------------------------
@@ -1986,7 +1986,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz,Psol
   REAL(KIND=dp), INTENT(IN)            :: NodalExtPressure(:), NodalNetPressure(:)
   REAL(KIND=dp), INTENT(IN)            :: NodalBedPressure(:), NodalSlipCoeff(:,:)
-  REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio, bslope
+  REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio, bslope, comparePressureParam
   LOGICAL, INTENT(IN)                  :: NormalTangential, changeNormal, outputFlag
 
 !------------------------------------------------------------------------------
@@ -2003,6 +2003,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   REAL(KIND=dp) :: sigma(np,4)
   REAL(KIND=dp) :: Load(3), Vect(3),Tangent(3),Tangent2(3)
   REAL(KIND=dp) :: Pnu, Pnv, NCtheta, gamma, SlipCoeff, MassFlux, Alpha, bedAlpha
+  REAL(KIND=dp) :: comparedAlpha
 
   INTEGER :: i, j, p, q, t, dim, c, k, l
 
@@ -2158,8 +2159,13 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
       ELSE 
         ! TODO
           groundedHeaviSide = -1.0
+          ! use indicator for friction with a parmeterized water pressure
+          ! between pw and pwb 
+          ! comparePressureParam = 1 -> bedrock water pressure
+          ! comparePressureParam = 0 -> ice bottom water pressure          
+          comparedAlpha = Alpha + (bedAlpha - Alpha) * comparePressureParam
       ! gamma = gamma / h
-          IF ((nSn) < (bedAlpha) ) THEN
+          IF ((nSn) < (comparedAlpha) ) THEN
             betaHeaviSide = 0.0
             IF ( changeNormal ) THEN 
               slipBCNormal = tan2Normal2D(bslope)

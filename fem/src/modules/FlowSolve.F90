@@ -140,7 +140,7 @@
     INTEGER :: nIntegration, tempNodeIndex, jj, GLparaIndex, smoothingType
     REAL(KIND=dp) :: Time, FFstressSum, GLstressSum, cond, GLratio, bSlopEle, &
                      weaklyMu, GLposition, SmoothL, SmoothFactor, smoothingRange, &
-                     NCtheta
+                     NCtheta, comparePressureParam
 
     LOGICAL :: GLParaFlag, outputFlag = .FALSE., PressureParamFlag = .FALSE., &
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE., &
@@ -1394,6 +1394,11 @@
                 changeNormal =  GetLogical( BC, 'change first floating normal', GotIt)
                 IF ( .NOT. GotIt ) changeNormal = .FALSE.
                 !------------------------------------------------------------------------
+                !------------------------------------------------------------------------
+                !   choose different theta for the Nitsche's contact
+                comparePressureParam =  GetConstReal( BC, 'bottom water pressure alpha', GotIt)
+                IF ( .NOT. GotIt ) comparePressureParam = 0.0
+                !------------------------------------------------------------------------
 
                
                 BoundaryMatrix = 0.0d0
@@ -1403,7 +1408,7 @@
                                   weaklySlip, Viscosity, Density, U, V, W, P, ExtPressure, &
                                   bedPressure, SlipCoeff, NormalTangential, bSlopEle, &
                                   BoundaryMask, NetPressure, GLratio, NCtheta, changeNormal, &
-                                  outputFlag )
+                                  comparePressureParam, outputFlag )
 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
 
