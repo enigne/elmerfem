@@ -1969,9 +1969,9 @@ MODULE NavierStokes
 SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, &
                                   LoadVector, Element, ParentElement, n, np, nIntegration, &
                                   EpsilonBoundary, Nodalmu, Nodalrho, Ux, Uy, Uz, Psol, &
-                                  NodalExtPressure, NodalBedPressure, NodalSlipCoeff,&
-                                  NormalTangential, bslope, BoundaryMask, NodalNetPressure, &
-                                  GLratio, NCtheta, changeNormal, comparePressureParam, outputFlag )
+                                  NodalExtPressure, NodalBedPressure, NodalSlipCoeff, &
+                                  NormalTangential, bslope, BoundaryMask, GLratio, NCtheta, &
+                                  changeNormal, comparePressureParam, outputFlag )
 !------------------------------------------------------------------------------
   USE ElementUtils
 !------------------------------------------------------------------------------
@@ -1984,7 +1984,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   INTEGER, INTENT(IN)                  :: n, np, nIntegration
   REAL(KIND=dp), INTENT(IN)            :: Nodalmu(:),Nodalrho(:)
   REAL(KIND=dp), DIMENSION(:), INTENT(IN) :: Ux,Uy,Uz,Psol
-  REAL(KIND=dp), INTENT(IN)            :: NodalExtPressure(:), NodalNetPressure(:)
+  REAL(KIND=dp), INTENT(IN)            :: NodalExtPressure(:)
   REAL(KIND=dp), INTENT(IN)            :: NodalBedPressure(:), NodalSlipCoeff(:,:)
   REAL(KIND=dp), INTENT(IN)            :: BoundaryMask(:), GLratio, bslope, comparePressureParam
   LOGICAL, INTENT(IN)                  :: NormalTangential, changeNormal, outputFlag
@@ -2014,7 +2014,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
   LOGICAL :: Stat
 
 
-  ! SAVE Nodes, ParentNodes
+  SAVE Nodes, ParentNodes
   !------------------------------------------------------------------------------
   dim = CoordinateSystemDimension()
   c = dim + 1
