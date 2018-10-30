@@ -146,7 +146,7 @@
                weaklyDirichlet = .FALSE., smoothDirichlet = .FALSE., &
                NormalParamFlag = .FALSE., changeNormal = .FALSE.
     REAL(KIND=dp), POINTER :: GroundingLinePara(:), GroundedMask(:)
-    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), NetPressure(:), bSlope(:), &
+    REAL(KIND=dp), ALLOCATABLE :: weaklySlip(:), bSlope(:), &
                      betaReduced(:), EpsilonBoundary(:), BoundaryMask(:)
 !=========================================================================
 
@@ -169,7 +169,7 @@
        LocalTemperature, GasConstant, HeatCapacity, LocalTempPrev,MU,MV,MW,     &
        PseudoCompressibilityScale, PseudoCompressibility, PseudoPressure,       &
        PseudoPressureExists, PSolution, Drag, PotentialField, PotentialCoefficient, &
-       ComputeFree, Indexes, bedPressure, weaklySlip, NetPressure, bSlope, betaReduced, &
+       ComputeFree, Indexes, bedPressure, weaklySlip, bSlope, betaReduced, &
        EpsilonBoundary, BoundaryMask
 
 #ifdef USE_ISO_C_BINDINGS
@@ -333,7 +333,7 @@
                PotentialField, PotentialCoefficient, &
                LoadVector, Alpha, Beta, &
                ExtPressure, bedPressure, weaklySlip, &
-               NetPressure, bSlope, betaReduced, EpsilonBoundary, &
+               bSlope, betaReduced, EpsilonBoundary, &
                BoundaryMask, STAT=istat )
 
        END IF
@@ -364,7 +364,7 @@
                  PotentialField( N ), PotentialCoefficient( N ), &
                  LoadVector( 4,N ), Alpha( N ), Beta( N ), &
                  ExtPressure( N ), bedPressure( N ),     &
-                 weaklySlip( N ), NetPressure( N ), bSlope( N ), &
+                 weaklySlip( N ), bSlope( N ), &
                  betaReduced( N ), EpsilonBoundary( N ), &
                  BoundaryMask( N ), STAT=istat )
 
@@ -1292,9 +1292,7 @@
             !=======================================================================
             !     Net Pressure for GL parameterization (linear interpolation)
             !=======================================================================
-            DO jj = 1, n
-              NetPressure(jj) = GroundingLinePara(GroundingLineParaPerm(Element % NodeIndexes(jj)))
-            END DO
+
             !=======================================================================
             !          Get corresponding bedrock slop at the current element
             !         !!!!!!! TODO: Automatic computation need to be added !!!!!!!!
@@ -1407,7 +1405,7 @@
                                   LoadVector, Element, ParentElement, n, k, nIntegration, &
                                   weaklySlip, Viscosity, Density, U, V, W, P, ExtPressure, &
                                   bedPressure, SlipCoeff, NormalTangential, bSlopEle, &
-                                  BoundaryMask, NetPressure, GLratio, NCtheta, changeNormal, &
+                                  BoundaryMask, GLratio, NCtheta, changeNormal, &
                                   comparePressureParam, outputFlag )
 
                 CALL DefaultUpdateEquations( STIFF, FORCE, ParentElement )
