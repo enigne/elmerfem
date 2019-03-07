@@ -2212,6 +2212,14 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
                                           * (groundedHeaviSide + 1.0) * 0.5
           END DO   
         END DO
+        ! Add implicit water pressure
+        DO q=1,n
+          SlipCoeff = SUM( NodalSlipCoeff(1,1:n) * Basis(1:n) )
+          DO j = 1, dim
+            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s / gamma * Pnv * SlipCoeff &
+                                         * Basis(q) * Normal(j)
+          END DO
+        END DO
 
         ! Floating nodes
         k = (p-1)*c + i
