@@ -2103,7 +2103,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     !------------------------------------------------------------------------------
     e = SUM( EpsilonBoundary(1:n) * Basis(1:n) )
     h = ElementDiameter( Element, Nodes )
-    gamma = e * h
+    gamma = e / h
     ! NCtheta = 1.0
     Alpha = SUM( NodalExtPressure(1:n) * Basis(1:n) ) 
     bedAlpha = SUM( NodalBedPressure(1:n) * Basis(1:n) ) 
