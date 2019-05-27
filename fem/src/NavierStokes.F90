@@ -2117,14 +2117,14 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     ! Determine heaviSide function value
     IF ( GMaskInteg >= 1.0_dp  ) THEN 
       ! Grounded
-      groundedHeaviSide = 1.0
+      groundedHeaviSide = 0.0
       betaHeaviSide = 1.0
     ELSE IF ( GMaskInteg <= -1.0_dp  ) THEN 
       ! Floating
-      groundedHeaviSide = -1.0
+      groundedHeaviSide = 1.0
       betaHeaviSide = -1.0
     ELSE
-      groundedHeaviSide = 0.0
+      groundedHeaviSide = 0.5
     END IF
 
     !------------------------------------------------------------------------------
@@ -2146,19 +2146,19 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     ! TODO: check beta heaviside for floating element
     ! n*sigma*n-gamma*u*n <= -pw: grounded
     ! n*sigma*n-gamma*u*n > -pw: floating
-    IF (groundedHeaviSide == 0.0_dp) THEN
+    IF (groundedHeaviSide == 0.5) THEN
       ! gamma = gamma / h
       IF ( GMaskInteg >= 0.0) THEN
         IF ((nSn- gamma*Un) < Alpha ) THEN
-          groundedHeaviSide = 1.0
+          groundedHeaviSide = 0.0
           betaHeaviSide = 1.0
         ELSE
-          groundedHeaviSide = -1.0
+          groundedHeaviSide = 1.0
           betaHeaviSide = -1.0
         END IF
       ELSE 
         ! TODO
-          groundedHeaviSide = -1.0
+          groundedHeaviSide = 1.0
           ! use indicator for friction with a parmeterized water pressure
           ! between pw and pwb 
           ! comparePressureParam = 1 -> bedrock water pressure
@@ -2209,21 +2209,21 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
             Pnu = sigma(q, j) - gamma * Normal(j) * ParentBasis(q)
 
             STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) + s / gamma * Pnu * Pnv &
-                                          * (groundedHeaviSide + 1.0) * 0.5
+                                          * (1.0 - groundedHeaviSide )
           END DO   
         END DO
         ! Add implicit water pressure
-        DO q=1,n
-          SlipCoeff = SUM( NodalSlipCoeff(1,1:n) * Basis(1:n) )
-          DO j = 1, dim
-            STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s / gamma * Pnv * SlipCoeff &
-                                         * Basis(q) * Normal(j)
-          END DO
-        END DO
+        ! DO q=1,n
+        !   SlipCoeff = SUM( NodalSlipCoeff(1,1:n) * Basis(1:n) )
+        !   DO j = 1, dim
+        !     STIFF((p-1)*c+i,(q-1)*c+j) = STIFF((p-1)*c+i,(q-1)*c+j) - s / gamma * Pnv * SlipCoeff &
+        !                                  * Basis(q) * Normal(j)
+        !   END DO
+        ! END DO
 
         ! Floating nodes
         k = (p-1)*c + i
-        Force(k) = Force(k) - s / gamma * Pnv * Alpha *(1.0 - groundedHeaviSide) * 0.5  
+        Force(k) = Force(k) - s / gamma * Pnv * Alpha * groundedHeaviSide
       END DO
     END DO    
 
