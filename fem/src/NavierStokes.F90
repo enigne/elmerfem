@@ -2166,7 +2166,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
           comparedAlpha = Alpha + (bedAlpha - Alpha) * comparePressureParam
       ! gamma = gamma / h
           IF ((nSn) < (comparedAlpha) ) THEN
-            betaHeaviSide = 0.0
+            betaHeaviSide = 1.0
             IF ( changeNormal ) THEN 
               slipBCNormal = tan2Normal2D(bslope)
             ELSE
