@@ -2179,6 +2179,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
             betaHeaviSide = -1.0
           END IF
       END IF
+        WRITE(*, *) GMaskInteg, nSn, Alpha,  NodalSlipCoeff(1,1:n) * Basis(1:n), Un
     END IF
 
 
