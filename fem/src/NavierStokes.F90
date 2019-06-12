@@ -2149,7 +2149,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
     IF (groundedHeaviSide == 0.5) THEN
       ! gamma = gamma / h
       IF ( GMaskInteg >= 0.0) THEN
-        IF ((nSn- gamma*Un) < Alpha ) THEN
+        IF ((nSn- 0.5*gamma*Un) < Alpha ) THEN
           groundedHeaviSide = 0.0
           betaHeaviSide = 1.0
         ELSE
