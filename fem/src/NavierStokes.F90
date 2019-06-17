@@ -2154,7 +2154,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
           betaHeaviSide = 1.0
         ELSE
           groundedHeaviSide = 1.0
-          betaHeaviSide = -1.0
+          betaHeaviSide = 0.0
         END IF
       ELSE 
         ! TODO
@@ -2166,7 +2166,7 @@ SUBROUTINE StokesNitscheBoundary( STIFF, FORCE, BoundaryMatrix, BoundaryVector, 
           comparedAlpha = Alpha + (bedAlpha - Alpha) * comparePressureParam
       ! gamma = gamma / h
           IF ((nSn) < (comparedAlpha) ) THEN
-            betaHeaviSide = 1.0
+            betaHeaviSide = 0.0
             IF ( changeNormal ) THEN 
               slipBCNormal = tan2Normal2D(bslope)
             ELSE
